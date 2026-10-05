@@ -285,16 +285,22 @@
 
     document.getElementById('btn-annuler').addEventListener('click', fermer);
 
+    // Suppression d'un vœu
     btnSupprimer.addEventListener('click', async function() {
       if (!ligneSelectionneeId) return;
       if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
         try {
-          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
-          fermer();
-          await toutCharger();
-        } catch (err) {
-          alert("Impossible de supprimer la ligne.");
+          await grist.selectedTable.destroy([ligneSelectionneeId]);
+        } catch (e1) {
+          try {
+            await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          } catch (e2) {
+            alert("Erreur lors de la suppression.");
+            return;
+          }
         }
+        fermer();
+        await toutCharger();
       }
     });
 
@@ -315,7 +321,6 @@
       }
     }
 
-    // Extraction propre d'un objet ligne qu'il vienne de fetchTable ou fetchSelectedTable
     function getVal(row, noms) {
       for (const n of noms) {
         if (row[n] !== undefined && row[n] !== null) return row[n];
@@ -343,7 +348,7 @@
           rafraichirSelect();
         }
       } catch(e) {
-        console.warn("Erreur chargement équipe :", e);
+        console.warn("Chargement équipe :", e);
       }
     }
 
@@ -352,28 +357,24 @@
 
       let lignes = [];
 
-      // 1. Essai prioritaire : lecture de la table sélectionnée via GristDocAPI
       try {
-        const selected = await grist.docApi.fetchSelectedTable();
-        if (Array.isArray(selected) && selected.length > 0) {
-          lignes = selected;
+        const raw = await grist.docApi.fetchTable('Presences');
+        if (raw && raw.id) {
+          const cols = Object.keys(raw);
+          for (let i = 0; i < raw.id.length; i++) {
+            const r = { id: raw.id[i] };
+            for (const c of cols) {
+              r[c] = raw[c][i];
+            }
+            lignes.push(r);
+          }
         }
       } catch(e) {}
 
-      // 2. Repli : fetchTable('Presences')
       if (lignes.length === 0) {
         try {
-          const raw = await grist.docApi.fetchTable('Presences');
-          if (raw && raw.id) {
-            const cols = Object.keys(raw);
-            for (let i = 0; i < raw.id.length; i++) {
-              const r = { id: raw.id[i] };
-              for (const c of cols) {
-                r[c] = raw[c][i];
-              }
-              lignes.push(r);
-            }
-          }
+          const selected = await grist.docApi.fetchSelectedTable();
+          if (Array.isArray(selected) && selected.length > 0) lignes = selected;
         } catch(e) {}
       }
 
@@ -406,7 +407,6 @@
         const sNorm = normaliser(r.statut);
         const confNorm = normaliser(r.statutConflit);
 
-        // Conflit local
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
           if (!r.agentId || r.agentId !== autre.agentId) return false;
@@ -466,6 +466,7 @@
       calendar.addEventSource(events);
     }
 
+    // ENREGISTREMENT (Création ou Mise à jour)
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentId = parseInt(selectAgent.value, 10);
       const statut = selectStatut.value;
@@ -477,26 +478,48 @@
         return;
       }
 
-      const dDebut = new Date(debut + 'T12:00:00Z').getTime() / 1000;
-      const dFin = new Date(fin + 'T12:00:00Z').getTime() / 1000;
+      // Conversion timestamp Unix entier (secondes à midi UTC)
+      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
 
-      const fields = {
+      const champsGrist = {
         qui: agentId,
         STATUT: statut,
-        Date_debut: dDebut,
-        Date_fin: dFin
+        Date_debut: tsDebut,
+        Date_fin: tsFin
       };
 
       try {
         if (ligneSelectionneeId) {
-          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fields]]);
+          // Mise à jour de la ligne
+          try {
+            await grist.selectedTable.update({
+              id: ligneSelectionneeId,
+              fields: champsGrist
+            });
+          } catch (e1) {
+            await grist.docApi.applyUserActions([
+              ['UpdateRecord', 'Presences', ligneSelectionneeId, champsGrist]
+            ]);
+          }
         } else {
-          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fields]]);
+          // Création d'une nouvelle ligne
+          try {
+            await grist.selectedTable.create({
+              fields: champsGrist
+            });
+          } catch (e2) {
+            await grist.docApi.applyUserActions([
+              ['AddRecord', 'Presences', null, champsGrist]
+            ]);
+          }
         }
+
         fermer();
         await toutCharger();
       } catch (err) {
-        alert("Impossible d'enregistrer.");
+        console.error("Erreur enregistrement :", err);
+        alert("Erreur lors de l'enregistrement dans Grist.");
       }
     });
 
@@ -584,12 +607,8 @@
 
       toutCharger();
 
-      grist.onRecords(function(records) {
-        if (records && records.length > 0) {
-          afficherEvenements(records);
-        } else {
-          toutCharger();
-        }
+      grist.onRecords(function() {
+        toutCharger();
       });
 
       window.addEventListener('focus', toutCharger);

@@ -24,7 +24,6 @@
       cursor: pointer;
       font-weight: 500;
     }
-    /* Modale de saisie */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -91,7 +90,7 @@
 <body>
   <div id="calendar"></div>
 
-  <!-- Formulaire de saisie modal -->
+  <!-- Formulaire de saisie -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
@@ -109,7 +108,6 @@
           <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
           <option value="PRESENT">PRESENT</option>
           <option value="ASTREINTE">ASTREINTE</option>
-          <option value="CONFLIT">CONFLIT</option>
         </select>
       </div>
 
@@ -135,16 +133,16 @@
     const mapAgents = new Map();
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',
-      'CONGES': '#fbc02d',
+      'CONFLIT': '#d32f2f',        // Rouge
+      'CONGES': '#fbc02d',         // Jaune
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',
+      'TELETRAVAIL': '#1976d2',    // Bleu
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00',
+      'EN DEPLACEMENT': '#f57c00', // Orange
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',
+      'PRESENT': '#388e3c',        // Vert
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'
+      'ASTREINTE': '#7b1fa2'       // Violet
     };
 
     function addOneDay(str) {
@@ -157,6 +155,10 @@
     function formaterNom(nomBrut) {
       if (!nomBrut) return 'Agent';
       return String(nomBrut).replace(/^#Invalid Ref:\s*/i, '').trim();
+    }
+
+    function normaliserStatut(s) {
+      return String(s || '').toUpperCase().trim();
     }
 
     const modalEl = document.getElementById('fenetre-voeu');
@@ -221,4 +223,137 @@
         buttonText: {
           today: "Aujourd'hui",
           month: 'Mois',
-          week: 'Semaine
+          week: 'Semaine'
+        },
+
+        select: function(info) {
+          inputDebut.value = info.startStr;
+          const finCalculee = new Date(info.endStr);
+          finCalculee.setDate(finCalculee.getDate() - 1);
+          inputFin.value = finCalculee.toISOString().split('T')[0];
+          modalEl.style.display = 'flex';
+        },
+
+        eventClick: function(info) {
+          if (info.event.id) {
+            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
+          }
+        },
+
+        events: []
+      });
+
+      calendar.render();
+
+      grist.ready({ requiredAccess: 'full' });
+
+      grist.onRecords(function(records) {
+        if (!records) return;
+
+        // Récupération des agents et de leur ID
+        records.forEach(r => {
+          let idAgent = null;
+          if (typeof r.qui === 'number') {
+            idAgent = r.qui;
+          } else if (r.qui && typeof r.qui === 'object' && r.qui.id) {
+            idAgent = r.qui.id;
+          }
+
+          const nomAffiche = r.Agent || (typeof r.qui === 'string' ? r.qui : null);
+          if (idAgent && nomAffiche && !String(nomAffiche).startsWith('#Invalid Ref')) {
+            mapAgents.set(idAgent, formaterNom(nomAffiche));
+          }
+        });
+
+        // Mise à jour des choix d'agents
+        const valeurCourante = selectAgent.value;
+        selectAgent.innerHTML = '';
+        Array.from(mapAgents.entries())
+          .sort((a, b) => a[1].localeCompare(b[1]))
+          .forEach(([id, nom]) => {
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = nom;
+            selectAgent.appendChild(opt);
+          });
+        if (valeurCourante) selectAgent.value = valeurCourante;
+
+        // Liste filtrée des enregistrements ayant des dates
+        const valides = records.filter(r => (r.Date_debut || r.date_debut));
+
+        const events = valides.map((r, index, array) => {
+          const debut = r.Date_debut || r.date_debut;
+          const fin = r.Date_fin || r.date_fin || debut;
+          const nomComplet = formaterNom(r.Agent || r.qui);
+          
+          const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
+          const sNorm = normaliserStatut(statutBrut);
+          const statutConflitCol = normaliserStatut(r.Statut_conflit);
+
+          // Détection de conflit avec les règles métier :
+          // L'ASTREINTE peut coexister avec TELETRAVAIL, EN DEPLACEMENT ou PRESENT
+          const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+          const doublonInterdit = array.some((autre, autreIdx) => {
+            if (index === autreIdx) return false;
+            const autreNom = formaterNom(autre.Agent || autre.qui);
+            if (autreNom !== nomComplet) return false;
+
+            const autreDebut = autre.Date_debut || autre.date_debut;
+            const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
+            const chevauchement = (debut <= autreFin && fin >= autreDebut);
+
+            if (!chevauchement) return false;
+
+            const autreSNorm = normaliserStatut(autre.STATUT || autre.Statut || autre.Statut_affiche);
+
+            // Cas toléré : l'un est ASTREINTE et l'autre est dans la liste autorisée
+            const unEstAstreinte = sNorm.includes('ASTREINTE');
+            const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
+
+            if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) {
+              return false; // Pas de conflit
+            }
+            if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) {
+              return false; // Pas de conflit
+            }
+
+            // Tout autre chevauchement (ex: 2 présences, congé + télétravail, congé + astreinte) est un conflit
+            return true;
+          });
+
+          const estEnConflit = statutConflitCol.includes('CONFLIT') || doublonInterdit;
+
+          let couleur = '#3788d8';
+          let libelleAffiche = statutBrut;
+
+          if (estEnConflit) {
+            couleur = COULEURS['CONFLIT'];
+            libelleAffiche = 'CONFLIT';
+          } else {
+            for (const [cle, val] of Object.entries(COULEURS)) {
+              if (sNorm.includes(cle)) {
+                couleur = val;
+                break;
+              }
+            }
+          }
+
+          return {
+            id: r.id,
+            title: nomComplet + (libelleAffiche ? ' — ' + libelleAffiche : ''),
+            start: debut,
+            end: addOneDay(fin),
+            backgroundColor: couleur,
+            borderColor: couleur,
+            allDay: true
+          };
+        });
+
+        calendar.removeAllEvents();
+        calendar.addEventSource(events);
+      });
+    });
+  </script>
+</body>
+</html>

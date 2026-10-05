@@ -54,29 +54,48 @@
       height: 100%;
     }
 
-    /* Style des événements du calendrier */
-    .fc-event {
-      cursor: pointer;
+    /* --- ÉPAISSEUR DES BARRES & RETOUR À LA LIGNE --- */
+    .fc-event, 
+    .fc-daygrid-event, 
+    .fc-daygrid-block-event {
+      white-space: normal !important; /* Autorise le retour à la ligne */
+      min-height: 38px !important;    /* Rend la barre plus épaisse en hauteur */
+      margin-bottom: 4px !important;  /* Espace entre les barres */
+      border-radius: 5px !important;
       border: none !important;
-      border-radius: 4px !important;
-      padding: 1px 4px !important;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+      cursor: pointer;
     }
-    .event-contenu {
-      font-size: 11px;
+
+    .fc-event-main {
+      padding: 3px 6px !important;
+      white-space: normal !important;
+    }
+
+    .event-card {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
       line-height: 1.25;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      text-align: left;
     }
-    .event-badge-statut {
-      font-weight: 700;
-      text-transform: uppercase;
-      margin-right: 4px;
-      padding: 1px 4px;
-      border-radius: 3px;
-      background: rgba(0, 0, 0, 0.22);
+
+    .event-ligne-statut {
+      display: inline-block;
       font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 1px 5px;
+      border-radius: 3px;
+      width: fit-content;
+    }
+
+    .event-ligne-nom {
+      font-size: 11px;
+      font-weight: 600;
+      word-break: break-word; /* Coupe les mots trop longs si nécessaire */
     }
 
     /* Fenêtre modale de saisie */
@@ -206,16 +225,16 @@
     let recordsEnCache = [];
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',
-      'CONGES': '#fbc02d',
+      'CONFLIT': '#d32f2f',        // Rouge vif
+      'CONGES': '#fbc02d',         // Jaune
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',
+      'TELETRAVAIL': '#1976d2',    // Bleu
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00',
+      'EN DEPLACEMENT': '#f57c00', // Orange
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',
+      'PRESENT': '#388e3c',        // Vert
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'
+      'ASTREINTE': '#7b1fa2'       // Violet
     };
 
     function addOneDay(str) {
@@ -304,7 +323,7 @@
           } catch (e) {}
         }
       } catch (err) {
-        console.warn("Erreur chargement équipe :", err);
+        console.warn("Erreur chargement annuaire :", err);
       }
 
       rafraichirSelect();
@@ -395,19 +414,18 @@
           }
         }
 
-        const tagStatut = estEnConflit ? 'CONFLIT ⚠' : (statutBrut || 'PRESENCE');
+        const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : (statutBrut || 'PRESENCE');
 
         return {
           id: r.id,
-          // Titre brut de secours
-          title: `[${tagStatut}] ${nomComplet}`,
+          title: `[${badgeTexte}] ${nomComplet}`,
           start: debut,
           end: addOneDay(fin),
           backgroundColor: couleur,
           borderColor: couleur,
           allDay: true,
           extendedProps: {
-            statutBadge: tagStatut,
+            statutBadge: badgeTexte,
             nomAgent: nomComplet,
             estConflit: estEnConflit,
             periodeTexte: `${debut} au ${fin}`
@@ -470,16 +488,19 @@
           week: 'Semaine'
         },
 
-        // Personnalisation du rendu des bandeaux pour afficher le badge au début
+        // Rendu sur 2 lignes distinctes dans la barre épaisse
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
           const nom = arg.event.extendedProps.nomAgent || arg.event.title;
           
           const conteneur = document.createElement('div');
-          conteneur.className = 'event-contenu';
+          conteneur.className = 'event-card';
           conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}`;
 
-          conteneur.innerHTML = `<span class="event-badge-statut">${badge}</span><span>${nom}</span>`;
+          conteneur.innerHTML = `
+            <div><span class="event-ligne-statut">${badge}</span></div>
+            <div class="event-ligne-nom">${nom}</div>
+          `;
           return { domNodes: [conteneur] };
         },
 

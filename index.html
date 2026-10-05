@@ -18,7 +18,6 @@
       overflow: hidden;
     }
 
-    /* Barre de légende */
     #barre-legende {
       display: flex;
       flex-wrap: wrap;
@@ -54,7 +53,6 @@
       height: 100%;
     }
 
-    /* Épaisseur et retour à la ligne */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
@@ -98,7 +96,6 @@
       word-break: break-word;
     }
 
-    /* Modale de saisie / modification */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -175,7 +172,6 @@
 </head>
 <body>
 
-  <!-- Légende visuelle -->
   <div id="barre-legende">
     <span style="font-size: 11px; text-transform: uppercase; color: #64748b; margin-right: 4px;">Légende :</span>
     <span class="item-legende"><span class="pastille" style="background:#fbc02d;"></span> Congés</span>
@@ -190,7 +186,6 @@
     <div id="calendar"></div>
   </div>
 
-  <!-- Formulaire modal (Création / Modification / Suppression) -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3 id="titre-modal">Nouveau vœu de présence</h3>
@@ -235,9 +230,9 @@
 
   <script>
     let calendar;
-    const annuaireAgents = new Map(); // id (entier) -> nom complet
+    const annuaireAgents = new Map(); // ID numérique -> Nom complet
     let recordsEnCache = [];
-    let ligneSelectionneeId = null; // null = Création, sinon Row ID Grist pour Modification
+    let ligneSelectionneeId = null;
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -285,7 +280,6 @@
 
     document.getElementById('btn-annuler').addEventListener('click', fermer);
 
-    // Supprimer l'événement cliqué
     btnSupprimer.addEventListener('click', async function() {
       if (!ligneSelectionneeId) return;
       if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
@@ -306,7 +300,7 @@
       const listeTrie = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
       for (const [id, libelle] of listeTrie) {
         const opt = document.createElement('option');
-        opt.value = id;
+        opt.value = String(id);
         opt.textContent = libelle;
         selectAgent.appendChild(opt);
       }
@@ -356,23 +350,20 @@
           } catch (e) {}
         }
       } catch (err) {
-        console.warn("Erreur chargement annuaire :", err);
+        console.warn("Erreur chargement équipe :", err);
       }
 
       rafraichirSelect();
-      if (recordsEnCache.length > 0) {
-        afficherEvenements(recordsEnCache);
-      }
     }
 
     function identifierAgent(r) {
       let id = null;
-      if (typeof r.Agent === 'number') id = r.Agent;
-      else if (typeof r.qui === 'number') id = r.qui;
-      else if (r.Agent && typeof r.Agent === 'object' && r.Agent.id) id = r.Agent.id;
+      if (typeof r.qui === 'number') id = r.qui;
+      else if (typeof r.Agent === 'number') id = r.Agent;
       else if (r.qui && typeof r.qui === 'object' && r.qui.id) id = r.qui.id;
+      else if (r.Agent && typeof r.Agent === 'object' && r.Agent.id) id = r.Agent.id;
       else {
-        const valStr = String(r.Agent || r.qui || '').trim();
+        const valStr = String(r.qui || r.Agent || '').trim();
         if (/^\d+$/.test(valStr)) id = parseInt(valStr, 10);
       }
 
@@ -383,12 +374,17 @@
       const texte = r.Agent || r.qui;
       if (typeof texte === 'string' && texte.trim() && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
         const propre = nettoyerTexte(texte);
-        if (id !== null) annuaireAgents.set(id, propre);
+        // Retrouver l'ID si le nom figure dans l'annuaire
+        for (const [aId, aNom] of annuaireAgents.entries()) {
+          if (aNom === propre) {
+            return { id: aId, nom: propre };
+          }
+        }
         return { id: id, nom: propre };
       }
 
       if (id !== null) return { id: id, nom: 'Agent #' + id };
-      return { id: null, nom: nettoyerTexte(texte) || 'Agent' };
+      return { id: null, nom: 'Agent' };
     }
 
     function afficherEvenements(records) {
@@ -406,7 +402,6 @@
         const sNorm = normaliser(statutBrut);
         const statutConflitCol = normaliser(r.Statut_conflit);
 
-        // Détection de conflit
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
 
@@ -460,9 +455,9 @@
           extendedProps: {
             rowId: r.id,
             agentId: infoAgent.id,
+            nomAgent: nomComplet,
             statutInitial: statutBrut,
             statutBadge: badgeTexte,
-            nomAgent: nomComplet,
             debutReel: debut,
             finReelle: fin,
             estConflit: estEnConflit,
@@ -475,7 +470,6 @@
       calendar.addEventSource(events);
     }
 
-    // Enregistrement : Création OU Modification selon ligneSelectionneeId
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentId = parseInt(selectAgent.value, 10);
       const statut = selectStatut.value;
@@ -495,18 +489,16 @@
 
       try {
         if (ligneSelectionneeId) {
-          // --- MODE MODIFICATION ---
           try {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, Agent: agentId } });
-          } catch(e) {
             await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, qui: agentId } });
+          } catch(e) {
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, Agent: agentId } });
           }
         } else {
-          // --- MODE CRÉATION ---
           try {
-            await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
-          } catch (err) {
             await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
+          } catch (err) {
+            await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
           }
         }
         fermer();
@@ -516,7 +508,7 @@
       }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -552,8 +544,7 @@
           return { domNodes: [conteneur] };
         },
 
-        // CLIC SUR UNE CASE VIDE -> CRÉATION
-        select: async function(info) {
+        select: function(info) {
           ligneSelectionneeId = null;
           titreModal.textContent = "Nouveau vœu de présence";
           btnSupprimer.style.display = "none";
@@ -563,34 +554,42 @@
           finCalculee.setDate(finCalculee.getDate() - 1);
           inputFin.value = finCalculee.toISOString().split('T')[0];
 
-          await chargerEquipeGlobale();
+          rafraichirSelect();
           modalEl.style.display = 'flex';
         },
 
-        // CLIC SUR UNE BARRE EXISTANTE (OU EN CONFLIT) -> MODIFICATION DIRECTE
-        eventClick: async function(info) {
+        eventClick: function(info) {
           const props = info.event.extendedProps;
           ligneSelectionneeId = props.rowId;
 
-          // Met à jour la sélection de la ligne dans Grist
           grist.setCursorPos({ rowId: parseInt(ligneSelectionneeId, 10) });
 
-          // Adapter la modale en mode modification
           titreModal.textContent = "Modifier la présence";
           btnSupprimer.style.display = "inline-block";
 
           inputDebut.value = props.debutReel;
           inputFin.value = props.finReelle;
 
-          await chargerEquipeGlobale();
+          // Remplir le sélecteur d'agent sans le réinitialiser
+          rafraichirSelect();
 
-          // Pré-remplir l'agent
+          // Ciblage exact par ID ou par nom
+          let cibleTrouvee = false;
           if (props.agentId) {
             selectAgent.value = String(props.agentId);
+            if (selectAgent.value === String(props.agentId)) cibleTrouvee = true;
+          }
+          if (!cibleTrouvee && props.nomAgent) {
+            for (let opt of selectAgent.options) {
+              if (opt.textContent === props.nomAgent) {
+                selectAgent.value = opt.value;
+                break;
+              }
+            }
           }
 
-          // Pré-remplir le statut initial réel (même en conflit)
-          const sInit = (props.statutInitial || '').toUpperCase().trim();
+          // Ciblage du statut
+          const sInit = normaliser(props.statutInitial);
           for (let opt of selectStatut.options) {
             if (sInit.includes(opt.value)) {
               selectStatut.value = opt.value;
@@ -607,18 +606,13 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      chargerEquipeGlobale();
+      await chargerEquipeGlobale();
 
       grist.onRecords(async function(records) {
         if (!records) return;
         recordsEnCache = records;
 
-        const aDesNumerosNonResolus = records.some(r => {
-          const info = identifierAgent(r);
-          return info.nom.startsWith('Agent #') || info.nom === 'Agent';
-        });
-
-        if (annuaireAgents.size === 0 || aDesNumerosNonResolus) {
+        if (annuaireAgents.size === 0) {
           await chargerEquipeGlobale();
         }
 

@@ -134,7 +134,7 @@
       border-radius: 4px;
       box-sizing: border-box;
       font-size: 13px;
-      background-color: #fff;
+      background: #fff;
     }
     .barre-boutons {
       display: flex;
@@ -191,7 +191,7 @@
       <div class="champ">
         <label for="form-agent">Membre de l'équipe</label>
         <select id="form-agent">
-          <option value="">Chargement des agents...</option>
+          <option value="">-- Choisir un membre --</option>
         </select>
       </div>
 
@@ -228,9 +228,9 @@
 
   <script>
     let calendar;
-    // Map : ID de la ligne dans Equipes (entier) -> Libellé affiché
-    const annuaireEquipe = new Map();
-    let donneesLignes = [];
+    // Map : identifiant (ID entier ou texte) -> Libellé affiché
+    const annuaireAgents = new Map();
+    let memoireRecords = [];
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -251,6 +251,9 @@
       if (typeof v === 'string') {
         const m = v.match(/^(\d{4}-\d{2}-\d{2})/);
         if (m) return m[1];
+        // Format JJ-MM-AAAA
+        const fr = v.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+        if (fr) return `${fr[3]}-${fr[2]}-${fr[1]}`;
       }
       if (typeof v === 'number') {
         const ts = v < 10000000000 ? v * 1000 : v;
@@ -269,6 +272,23 @@
 
     function normaliser(s) {
       return String(s || '').toUpperCase().trim();
+    }
+
+    function getVal(row, champs) {
+      if (!row) return null;
+      for (const c of champs) {
+        if (row[c] !== undefined && row[c] !== null) return row[c];
+      }
+      const cles = Object.keys(row);
+      for (const c of champs) {
+        const pur = c.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const k of cles) {
+          if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === pur) {
+            if (row[k] !== undefined && row[k] !== null) return row[k];
+          }
+        }
+      }
+      return null;
     }
 
     const modalEl = document.getElementById('fenetre-voeu');
@@ -290,135 +310,121 @@
 
     btnSupprimer.addEventListener('click', async function() {
       if (!ligneSelectionneeId) return;
-      if (confirm("Voulez-vous supprimer cette plage de présence ?")) {
+      if (confirm("Supprimer cette présence ?")) {
         try {
-          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
-        } catch (e) {
+          await grist.selectedTable.destroy([ligneSelectionneeId]);
+        } catch(e) {
           try {
-            await grist.selectedTable.destroy([ligneSelectionneeId]);
+            await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
           } catch(e2) {
-            alert("Erreur lors de la suppression.");
+            alert("Erreur de suppression.");
             return;
           }
         }
         fermer();
-        await rechargerTout();
       }
     });
 
-    function remplirMenuDeroulantAgents() {
-      const valeurActuelle = selectAgent.value;
+    function majSelectAgents() {
+      const selectionActuelle = selectAgent.value;
       selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
 
-      const tri = Array.from(annuaireEquipe.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-      for (const [id, nom] of tri) {
+      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+      for (const [id, label] of liste) {
         const opt = document.createElement('option');
         opt.value = String(id);
-        opt.textContent = nom;
+        opt.textContent = label;
         selectAgent.appendChild(opt);
       }
 
-      if (valeurActuelle && annuaireEquipe.has(parseInt(valeurActuelle, 10))) {
-        selectAgent.value = valeurActuelle;
+      if (selectionActuelle && annuaireAgents.has(selectionActuelle)) {
+        selectAgent.value = selectionActuelle;
       }
     }
 
-    // Récupération systématique de TOUS les membres de l'équipe
-    async function chargerAnnuaire() {
+    // Essayer de lire la table d'équipe sans bloquer si on est en accès restreint
+    async function chargerEquipeOptionnel() {
       try {
-        const eqData = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
-        if (eqData && eqData.id) {
-          annuaireEquipe.clear();
-          const ids = eqData.id;
-          for (let i = 0; i < ids.length; i++) {
-            const rowId = ids[i];
-            const nom = eqData.Nom ? (eqData.Nom[i] || '') : '';
-            const prenom = eqData.Prenom ? (eqData.Prenom[i] || '') : '';
-            const fonc = eqData.Fonction ? (eqData.Fonction[i] || '') : '';
+        const t = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
+        if (t && t.id) {
+          for (let i = 0; i < t.id.length; i++) {
+            const rowId = t.id[i];
+            const nom = t.Nom ? (t.Nom[i] || '') : '';
+            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
+            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
             const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
-            annuaireEquipe.set(rowId, lib);
+            annuaireAgents.set(String(rowId), lib);
           }
-          remplirMenuDeroulantAgents();
+          majSelectAgents();
         }
-      } catch (err) {
-        console.warn("Impossible de lire Equipes via API :", err);
-      }
+      } catch(e) {}
     }
 
-    // Chargement complet et robuste des présences
-    async function rechargerTout() {
-      await chargerAnnuaire();
+    function afficherDonnees(records) {
+      if (!records || records.length === 0) return;
+      memoireRecords = records;
 
-      try {
-        const pres = await grist.docApi.fetchTable('Presences');
-        if (pres && pres.id) {
-          const lignes = [];
-          for (let i = 0; i < pres.id.length; i++) {
-            lignes.push({
-              id: pres.id[i],
-              qui: pres.qui ? pres.qui[i] : null,
-              Date_debut: pres.Date_debut ? pres.Date_debut[i] : (pres['Date début'] ? pres['Date début'][i] : null),
-              Date_fin: pres.Date_fin ? pres.Date_fin[i] : (pres['Date fin'] ? pres['Date fin'][i] : null),
-              STATUT: pres.STATUT ? pres.STATUT[i] : (pres.Statut ? pres.Statut[i] : ''),
-              Statut_conflit: pres.Statut_conflit ? pres.Statut_conflit[i] : 'OK'
-            });
-          }
-          donneesLignes = lignes;
-          afficherSurCalendrier(lignes);
-          return;
+      // 1. Extraire les agents des lignes de présence pour garantir le menu déroulant
+      records.forEach(r => {
+        const q = getVal(r, ['qui', 'Agent', 'agent']);
+        const txt = getVal(r, ['Agent', 'Identite', 'nom', 'prenom']);
+
+        if (typeof q === 'number') {
+          const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim())) ? txt.trim() : `Agent #${q}`;
+          annuaireAgents.set(String(q), nom);
+        } else if (typeof q === 'string' && q.trim()) {
+          annuaireAgents.set(q.trim(), q.trim());
+        } else if (q && typeof q === 'object' && q.id) {
+          annuaireAgents.set(String(q.id), q.Identite || `Agent #${q.id}`);
         }
-      } catch (e) {}
-
-      // Repli si fetchTable échoue
-      try {
-        const records = await grist.docApi.fetchSelectedTable();
-        if (Array.isArray(records) && records.length > 0) {
-          donneesLignes = records;
-          afficherSurCalendrier(records);
-        }
-      } catch (e2) {}
-    }
-
-    function afficherSurCalendrier(records) {
-      if (!records) return;
+      });
+      majSelectAgents();
 
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
-      // Extraction des agents pour compléter l'annuaire au cas où
-      records.forEach(r => {
-        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const txt = r.Agent || r.qui;
-        if (!isNaN(qId) && typeof txt === 'string' && !/^\d+$/.test(txt.trim()) && !txt.startsWith('#')) {
-          if (!annuaireEquipe.has(qId)) annuaireEquipe.set(qId, txt.trim());
-        }
-      });
-      remplirMenuDeroulantAgents();
-
+      // 2. Formater les événements
       const valides = records.map(r => {
-        const dDebut = parseDateStr(r.Date_debut || r['Date début'] || r.date_debut);
-        const dFin = parseDateStr(r.Date_fin || r['Date fin'] || r.date_fin) || dDebut;
-        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const statut = String(r.STATUT || r.Statut || '').trim();
-        const conf = String(r.Statut_conflit || r['Statut conflit'] || 'OK').trim();
+        const debut = parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut', 'DateDebut']));
+        const fin = parseDateStr(getVal(r, ['Date_fin', 'Date fin', 'date_fin', 'DateFin'])) || debut;
+        const q = getVal(r, ['qui', 'Agent', 'agent']);
+        const txt = getVal(r, ['Agent', 'Identite', 'agent']);
+
+        let agentCle = '';
+        let nomAffiche = 'Agent';
+
+        if (typeof q === 'number') {
+          agentCle = String(q);
+          nomAffiche = annuaireAgents.get(agentCle) || (typeof txt === 'string' ? txt : `Agent #${q}`);
+        } else if (typeof q === 'string' && q.trim()) {
+          agentCle = q.trim();
+          nomAffiche = annuaireAgents.get(agentCle) || agentCle;
+        } else if (q && typeof q === 'object') {
+          agentCle = String(q.id || '');
+          nomAffiche = q.Identite || annuaireAgents.get(agentCle) || `Agent #${agentCle}`;
+        }
+
+        const statut = String(getVal(r, ['STATUT', 'Statut', 'statut']) || '').trim();
+        const statutConf = String(getVal(r, ['Statut_conflit', 'Statut conflit', 'statut_conflit', 'Statut2']) || 'OK').trim();
 
         return {
           id: r.id,
-          agentId: isNaN(qId) ? null : qId,
-          nomComplet: annuaireEquipe.get(qId) || (r.Agent && typeof r.Agent === 'string' ? r.Agent : `Agent #${qId}`),
-          debut: dDebut,
-          fin: dFin,
+          agentCle: agentCle,
+          nomAffiche: nomAffiche,
+          debut: debut,
+          fin: fin,
           statut: statut,
-          statutConflit: conf
+          statutConflit: statutConf
         };
       }).filter(r => Boolean(r.debut));
 
+      // 3. Détection des conflits
       const events = valides.map((r, index, array) => {
         const sNorm = normaliser(r.statut);
         const confNorm = normaliser(r.statutConflit);
 
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
-          if (!r.agentId || r.agentId !== autre.agentId) return false;
+          if (!r.agentCle || r.agentCle !== autre.agentCle) return false;
 
           const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
           if (!chevauche) return false;
@@ -451,7 +457,7 @@
 
         return {
           id: String(r.id),
-          title: `[${badgeTexte}] ${r.nomComplet}`,
+          title: `[${badgeTexte}] ${r.nomAffiche}`,
           start: r.debut,
           end: addOneDay(r.fin),
           backgroundColor: couleur,
@@ -459,8 +465,8 @@
           allDay: true,
           extendedProps: {
             rowId: r.id,
-            agentId: r.agentId,
-            nomAgent: r.nomComplet,
+            agentCle: r.agentCle,
+            nomAgent: r.nomAffiche,
             statutInitial: r.statut,
             statutBadge: badgeTexte,
             debutReel: r.debut,
@@ -477,53 +483,63 @@
 
     // Enregistrement
     document.getElementById('btn-valider').addEventListener('click', async function() {
-      const agentId = parseInt(selectAgent.value, 10);
+      const agentVal = selectAgent.value;
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
 
-      if (isNaN(agentId) || !debut || !fin) {
-        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
+      if (!agentVal || !debut || !fin) {
+        alert("Veuillez sélectionner un membre et des dates valides.");
         return;
       }
 
-      // Conversion timestamp Unix en secondes
-      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
-      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+      const agentNum = parseInt(agentVal, 10);
+      const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
+      // Données compatibles Grist
       const fields = {
-        qui: agentId,
+        qui: refAgent,
         STATUT: statut,
-        Date_debut: tsDebut,
-        Date_fin: tsFin
+        Date_debut: debut,
+        Date_fin: fin
       };
 
       try {
         if (ligneSelectionneeId) {
-          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fields]]);
+          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fields });
         } else {
-          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fields]]);
+          await grist.selectedTable.create({ fields: fields });
         }
         fermer();
-        await rechargerTout();
       } catch (err) {
+        // En cas d'exigence de timestamp en secondes
+        const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+        const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+        const fieldsTs = { qui: refAgent, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
+
         try {
-          // Essai avec dates en texte si la colonne est configurée en format texte/date
-          const fieldsIso = { qui: agentId, STATUT: statut, Date_debut: debut, Date_fin: fin };
           if (ligneSelectionneeId) {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsTs });
           } else {
-            await grist.selectedTable.create({ fields: fieldsIso });
+            await grist.selectedTable.create({ fields: fieldsTs });
           }
           fermer();
-          await rechargerTout();
-        } catch (e2) {
-          alert("Erreur lors de l'enregistrement dans Grist.");
+        } catch(e2) {
+          try {
+            if (ligneSelectionneeId) {
+              await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fieldsTs]]);
+            } else {
+              await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fieldsTs]]);
+            }
+            fermer();
+          } catch(e3) {
+            alert("Erreur lors de l'enregistrement dans Grist.");
+          }
         }
       }
     });
 
-    document.addEventListener('DOMContentLoaded', async function() {
+    document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -569,7 +585,7 @@
           finCalculee.setDate(finCalculee.getDate() - 1);
           inputFin.value = finCalculee.toISOString().split('T')[0];
 
-          remplirMenuDeroulantAgents();
+          majSelectAgents();
           modalEl.style.display = 'flex';
         },
 
@@ -583,9 +599,11 @@
           inputDebut.value = props.debutReel;
           inputFin.value = props.finReelle;
 
-          remplirMenuDeroulantAgents();
+          majSelectAgents();
 
-          if (props.agentId) selectAgent.value = String(props.agentId);
+          if (props.agentCle && annuaireAgents.has(props.agentCle)) {
+            selectAgent.value = props.agentCle;
+          }
 
           const sInit = normaliser(props.statutInitial);
           for (let opt of selectStatut.options) {
@@ -603,25 +621,17 @@
 
       calendar.render();
 
-      // Démarrage avec accès complet explicitement requis
-      grist.ready({ requiredAccess: 'full' });
+      // Démarrage standard Grist (compatible tout niveau d'accès)
+      grist.ready();
 
-      // Chargement immédiat des agents et des présences
-      await rechargerTout();
+      chargerEquipeOptionnel();
 
-      // En cas de mise à jour des lignes depuis une autre vue
       grist.onRecords(function(records) {
         if (records && records.length > 0) {
-          afficherSurCalendrier(records);
-        } else {
-          rechargerTout();
+          afficherDonnees(records);
+        } else if (memoireRecords.length > 0) {
+          afficherDonnees(memoireRecords);
         }
-      });
-
-      // Rechargement au retour sur la page
-      window.addEventListener('focus', rechargerTout);
-      document.addEventListener('visibilitychange', function() {
-        if (!document.hidden) rechargerTout();
       });
     });
   </script>

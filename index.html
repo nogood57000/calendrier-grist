@@ -89,7 +89,6 @@
 <body>
   <div id="calendar"></div>
 
-  <!-- Formulaire de saisie -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
@@ -129,7 +128,6 @@
 
   <script>
     let calendar;
-    // Map pour stocker : ID numérique Grist -> Nom affiché
     const mapAgents = new Map();
 
     const COULEURS = {
@@ -181,14 +179,12 @@
         return;
       }
 
-      // Préparation de l'objet pour Grist
       const champs = {
         Date_debut: debut,
         Date_fin: fin,
         STATUT: statut
       };
 
-      // Injection de la référence numérique
       const idNumerique = parseInt(agentIdStr, 10);
       if (!isNaN(idNumerique) && idNumerique > 0) {
         champs.qui = idNumerique;
@@ -223,7 +219,6 @@
           month: 'Mois',
           week: 'Semaine'
         },
-
         select: function(info) {
           inputDebut.value = info.startStr;
           const finCalculee = new Date(info.endStr);
@@ -231,13 +226,11 @@
           inputFin.value = finCalculee.toISOString().split('T')[0];
           modalEl.style.display = 'flex';
         },
-
         eventClick: function(info) {
           if (info.event.id) {
             grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
           }
         },
-
         events: []
       });
 
@@ -248,9 +241,7 @@
       grist.onRecords(function(records) {
         if (!records) return;
 
-        // 1. Remplissage des agents avec leur véritable ID de référence Grist
         records.forEach(r => {
-          // Dans Grist, pour une colonne Ref, r.qui est l'ID (nombre) ou l'objet {id: X}
           let idAgent = null;
           if (typeof r.qui === 'number') {
             idAgent = r.qui;
@@ -264,20 +255,18 @@
           }
         });
 
-        // Mise à jour des options du sélecteur
         const valeurCourante = selectAgent.value;
         selectAgent.innerHTML = '';
         Array.from(mapAgents.entries())
           .sort((a, b) => a[1].localeCompare(b[1]))
           .forEach(([id, nom]) => {
             const opt = document.createElement('option');
-            opt.value = id; // La valeur HTML est l'identifiant numérique attendu par Grist
-            opt.textContent = nom; // Le texte visible est le nom de l'agent
+            opt.value = id;
+            opt.textContent = nom;
             selectAgent.appendChild(opt);
           });
         if (valeurCourante) selectAgent.value = valeurCourante;
 
-        // 2. Préparation des événements
         const events = records.filter(r => (r.Date_debut || r.date_debut)).map((r, index, array) => {
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin || debut;

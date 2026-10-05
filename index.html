@@ -12,6 +12,7 @@
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       height: 100%;
       overflow: hidden;
+      background: #ffffff;
     }
     #calendar {
       height: 100vh;
@@ -22,64 +23,65 @@
       cursor: pointer;
       font-weight: 500;
     }
-    #modal-overlay {
+    /* Fenêtre modale */
+    #fenetre-voeu {
       display: none;
       position: fixed;
-      top: 0; left: 0; right: 0; bottom: 0;
-      background: rgba(0, 0, 0, 0.45);
-      z-index: 9999;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.5);
+      z-index: 10000;
       align-items: center;
       justify-content: center;
     }
-    #modal-box {
+    .conteneur-formulaire {
       background: #ffffff;
-      padding: 20px;
+      padding: 22px;
       border-radius: 8px;
       width: 320px;
-      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     }
-    #modal-box h3 {
-      margin-top: 0;
-      margin-bottom: 14px;
+    .conteneur-formulaire h3 {
+      margin: 0 0 16px 0;
       font-size: 16px;
       color: #1e293b;
     }
-    .form-group {
+    .champ {
       margin-bottom: 12px;
     }
-    .form-group label {
+    .champ label {
       display: block;
       font-size: 12px;
       font-weight: 600;
       margin-bottom: 4px;
       color: #475569;
     }
-    .form-group input, .form-group select {
+    .champ input, .champ select {
       width: 100%;
-      padding: 6px 8px;
+      padding: 7px 8px;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
       box-sizing: border-box;
       font-size: 13px;
     }
-    .modal-actions {
+    .barre-boutons {
       display: flex;
       justify-content: flex-end;
       gap: 8px;
-      margin-top: 16px;
+      margin-top: 18px;
     }
     .btn {
-      padding: 6px 12px;
+      padding: 7px 14px;
       border-radius: 4px;
       border: none;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 500;
     }
-    .btn-cancel {
+    .btn-gris {
       background: #e2e8f0;
       color: #334155;
     }
-    .btn-save {
+    .btn-bleu {
       background: #0284c7;
       color: #ffffff;
     }
@@ -88,16 +90,19 @@
 <body>
   <div id="calendar"></div>
 
-  <div id="modal-overlay">
-    <div id="modal-box">
+  <!-- Formulaire de saisie -->
+  <div id="fenetre-voeu">
+    <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
-      <div class="form-group">
-        <label for="input-agent">Membre de l'équipe</label>
-        <select id="input-agent"></select>
+      
+      <div class="champ">
+        <label for="form-agent">Membre de l'équipe</label>
+        <select id="form-agent"></select>
       </div>
-      <div class="form-group">
-        <label for="input-statut">Statut</label>
-        <select id="input-statut">
+
+      <div class="champ">
+        <label for="form-statut">Statut</label>
+        <select id="form-statut">
           <option value="CONGES">CONGES</option>
           <option value="TELETRAVAIL">TELETRAVAIL</option>
           <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
@@ -105,24 +110,27 @@
           <option value="CONFLIT">CONFLIT</option>
         </select>
       </div>
-      <div class="form-group">
-        <label for="input-debut">Date de début</label>
-        <input type="date" id="input-debut" />
+
+      <div class="champ">
+        <label for="form-debut">Date de début</label>
+        <input type="date" id="form-debut" />
       </div>
-      <div class="form-group">
-        <label for="input-fin">Date de fin</label>
-        <input type="date" id="input-fin" />
+
+      <div class="champ">
+        <label for="form-fin">Date de fin</label>
+        <input type="date" id="form-fin" />
       </div>
-      <div class="modal-actions">
-        <button type="button" class="btn btn-cancel" id="btn-cancel">Annuler</button>
-        <button type="button" class="btn btn-save" id="btn-save">Enregistrer</button>
+
+      <div class="barre-boutons">
+        <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
+        <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
       </div>
     </div>
   </div>
 
   <script>
     let calendar;
-    const agentsConnus = new Set();
+    const listeAgents = new Map(); // Stocke nom -> id d'enregistrement pour les références
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -137,43 +145,42 @@
       'ASTREINTE': '#7b1fa2'
     };
 
-    function addOneDay(dateStr) {
-      if (!dateStr) return dateStr;
-      const d = new Date(dateStr);
+    function addOneDay(str) {
+      if (!str) return str;
+      const d = new Date(str);
       d.setDate(d.getDate() + 1);
       return d.toISOString().split('T')[0];
     }
 
-    function removeOneDay(dateStr) {
-      if (!dateStr) return dateStr;
-      const d = new Date(dateStr);
+    function removeOneDay(str) {
+      if (!str) return str;
+      const d = new Date(str);
       d.setDate(d.getDate() - 1);
       return d.toISOString().split('T')[0];
     }
 
-    const modal = document.getElementById('modal-overlay');
-    const inputAgent = document.getElementById('input-agent');
-    const inputStatut = document.getElementById('input-statut');
-    const inputDebut = document.getElementById('input-debut');
-    const inputFin = document.getElementById('input-fin');
-    const btnCancel = document.getElementById('btn-cancel');
-    const btnSave = document.getElementById('btn-save');
+    const modalEl = document.getElementById('fenetre-voeu');
+    const selectAgent = document.getElementById('form-agent');
+    const selectStatut = document.getElementById('form-statut');
+    const inputDebut = document.getElementById('form-debut');
+    const inputFin = document.getElementById('form-fin');
 
-    function fermerModale() {
-      modal.style.display = 'none';
+    function fermer() {
+      modalEl.style.display = 'none';
       if (calendar) calendar.unselect();
     }
 
-    btnCancel.addEventListener('click', fermerModale);
+    document.getElementById('btn-annuler').addEventListener('click', fermer);
 
-    btnSave.addEventListener('click', async function() {
-      const agent = inputAgent.value;
-      const statut = inputStatut.value;
+    document.getElementById('btn-valider').addEventListener('click', async function() {
+      const nomAgent = selectAgent.value;
+      const idOuNomAgent = listeAgents.get(nomAgent) || nomAgent;
+      const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
 
-      if (!agent || !debut || !fin) {
-        alert("Veuillez renseigner un agent et les dates.");
+      if (!debut || !fin) {
+        alert("Veuillez sélectionner des dates valides.");
         return;
       }
 
@@ -182,15 +189,27 @@
           fields: {
             Date_debut: debut,
             Date_fin: fin,
-            qui: agent,
-            Agent: agent,
-            STATUT: statut,
-            Statut: statut
+            qui: idOuNomAgent,
+            STATUT: statut
           }
         });
-        fermerModale();
+        fermer();
       } catch (err) {
-        console.error("Erreur lors de la création :", err);
+        console.error("Erreur Grist :", err);
+        // Deuxième essai avec d'autres identifiants de colonnes possibles
+        try {
+          await grist.selectedTable.create({
+            fields: {
+              date_debut: debut,
+              date_fin: fin,
+              Agent: nomAgent,
+              Statut: statut
+            }
+          });
+          fermer();
+        } catch (e2) {
+          alert("Erreur lors de l'enregistrement dans la table.");
+        }
       }
     });
 
@@ -203,6 +222,7 @@
         firstDay: 1,
         selectable: true,
         selectMirror: false,
+        allDayText: 'Programme journée',
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -213,7 +233,84 @@
           month: 'Mois',
           week: 'Semaine'
         },
+
+        // Clic ou sélection sur une plage de dates : ouverture de la modale
         select: function(info) {
           inputDebut.value = info.startStr;
-          inputFin.value = removeOneDay(info.endStr);
-          modal.style.display = 'flex';
+          // Si sélection d'une seule journée, endStr est le jour suivant : on recale
+          const endCalcule = new Date(info.endStr);
+          endCalcule.setDate(endCalcule.getDate() - 1);
+          inputFin.value = endCalcule.toISOString().split('T')[0];
+          
+          modalEl.style.display = 'flex';
+        },
+
+        eventClick: function(info) {
+          if (info.event.id) {
+            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
+          }
+        },
+
+        events: []
+      });
+
+      calendar.render();
+
+      grist.ready({ requiredAccess: 'full' });
+
+      grist.onRecords(function(records) {
+        if (!records) return;
+
+        // Récupération des agents pour le menu déroulant
+        records.forEach(r => {
+          const texteAgent = r.Agent || r.qui;
+          if (texteAgent && typeof texteAgent === 'string' && texteAgent.trim()) {
+            listeAgents.set(texteAgent.trim(), r.qui);
+          }
+        });
+
+        // Mise à jour des options du select
+        const agentCourant = selectAgent.value;
+        selectAgent.innerHTML = '';
+        Array.from(listeAgents.keys()).sort().forEach(nom => {
+          const opt = document.createElement('option');
+          opt.value = nom;
+          opt.textContent = nom;
+          selectAgent.appendChild(opt);
+        });
+        if (agentCourant) selectAgent.value = agentCourant;
+
+        // Construction des événements
+        const events = records.filter(r => (r.Date_debut || r.date_debut)).map(r => {
+          const debut = r.Date_debut || r.date_debut;
+          const fin = r.Date_fin || r.date_fin || debut;
+          const agent = r.Agent || r.qui || 'Agent';
+          const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
+          const statutUpper = statutBrut.toUpperCase();
+
+          let couleur = '#3788d8';
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (statutUpper.includes(cle)) {
+              couleur = val;
+              break;
+            }
+          }
+
+          return {
+            id: r.id,
+            title: agent + (statutBrut ? ' — ' + statutBrut : ''),
+            start: debut,
+            end: addOneDay(fin),
+            backgroundColor: couleur,
+            borderColor: couleur,
+            allDay: true
+          };
+        });
+
+        calendar.removeAllEvents();
+        calendar.addEventSource(events);
+      });
+    });
+  </script>
+</body>
+</html>

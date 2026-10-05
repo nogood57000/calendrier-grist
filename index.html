@@ -23,13 +23,109 @@
       font-weight: 500;
       margin-bottom: 2px !important;
     }
+    /* Boîte de dialogue */
+    #modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+    }
+    #modal-box {
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 8px;
+      width: 320px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    }
+    #modal-box h3 {
+      margin-top: 0;
+      margin-bottom: 14px;
+      font-size: 16px;
+      color: #1e293b;
+    }
+    .form-group {
+      margin-bottom: 12px;
+    }
+    .form-group label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #475569;
+    }
+    .form-group input, .form-group select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 13px;
+    }
+    .modal-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .btn {
+      padding: 6px 12px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .btn-cancel {
+      background: #e2e8f0;
+      color: #334155;
+    }
+    .btn-save {
+      background: #0284c7;
+      color: #ffffff;
+    }
   </style>
 </head>
 <body>
   <div id="calendar"></div>
 
+  <!-- Formulaire modal -->
+  <div id="modal-overlay">
+    <div id="modal-box">
+      <h3>Nouveau vœu de présence</h3>
+      <div class="form-group">
+        <label for="input-agent">Membre de l'équipe</label>
+        <select id="input-agent"></select>
+      </div>
+      <div class="form-group">
+        <label for="input-statut">Statut</label>
+        <select id="input-statut">
+          <option value="CONGES">CONGES</option>
+          <option value="TELETRAVAIL">TELETRAVAIL</option>
+          <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
+          <option value="PRESENT">PRESENT</option>
+          <option value="CONFLIT">CONFLIT</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="input-debut">Date de début</label>
+        <input type="date" id="input-debut" />
+      </div>
+      <div class="form-group">
+        <label for="input-fin">Date de fin</label>
+        <input type="date" id="input-fin" />
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-cancel" id="btn-cancel">Annuler</button>
+        <button type="button" class="btn btn-save" id="btn-save">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let calendar;
+    const agentsConnus = new Set();
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -58,6 +154,50 @@
       return d.toISOString().split('T')[0];
     }
 
+    const modal = document.getElementById('modal-overlay');
+    const inputAgent = document.getElementById('input-agent');
+    const inputStatut = document.getElementById('input-statut');
+    const inputDebut = document.getElementById('input-debut');
+    const inputFin = document.getElementById('input-fin');
+    const btnCancel = document.getElementById('btn-cancel');
+    const btnSave = document.getElementById('btn-save');
+
+    function fermerModale() {
+      modal.style.display = 'none';
+      if (calendar) calendar.unselect();
+    }
+
+    btnCancel.addEventListener('click', fermerModale);
+
+    btnSave.addEventListener('click', async function() {
+      const agent = inputAgent.value;
+      const statut = inputStatut.value;
+      const debut = inputDebut.value;
+      const fin = inputFin.value;
+
+      if (!agent || !debut || !fin) {
+        alert("Veuillez renseigner un agent et les dates.");
+        return;
+      }
+
+      try {
+        await grist.selectedTable.create({
+          fields: {
+            Date_debut: debut,
+            Date_fin: fin,
+            qui: agent,
+            Agent: agent,
+            STATUT: statut,
+            Statut: statut
+          }
+        });
+        fermerModale();
+      } catch (err) {
+        console.error("Erreur lors de la création :", err);
+        alert("Impossible d'enregistrer l'événement.");
+      }
+    });
+
     document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
 
@@ -66,8 +206,8 @@
         locale: 'fr',
         firstDay: 1,
         selectable: true,
-        selectMirror: true,
-        allDayText: 'Programme journée', // Remplacement du texte
+        selectMirror: false,
+        allDayText: 'Programme journée',
         views: {
           dayGridWeek: {
             allDayText: 'Programme journée'
@@ -76,7 +216,7 @@
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,dayGridWeek' // Utilise dayGridWeek au lieu de timeGridWeek
+          right: 'dayGridMonth,dayGridWeek'
         },
         buttonText: {
           today: "Aujourd'hui",
@@ -84,22 +224,11 @@
           week: 'Semaine'
         },
 
-        select: async function(info) {
-          const debut = info.startStr;
-          const fin = removeOneDay(info.endStr);
-
-          try {
-            await grist.selectedTable.create({
-              fields: {
-                Date_debut: debut,
-                Date_fin: fin,
-                STATUT: 'CONGES'
-              }
-            });
-          } catch (err) {
-            console.error("Erreur de création :", err);
-          }
-          calendar.unselect();
+        // Déclenchement de la modale au clic/glisser
+        select: function(info) {
+          inputDebut.value = info.startStr;
+          inputFin.value = removeOneDay(info.endStr);
+          modal.style.display = 'flex';
         },
 
         eventClick: function(info) {
@@ -113,39 +242,4 @@
 
       calendar.render();
 
-      grist.ready({ requiredAccess: 'full' });
-
-      grist.onRecords(function(records) {
-        const events = records.filter(r => (r.Date_debut || r.date_debut)).map(r => {
-          const debut = r.Date_debut || r.date_debut;
-          const fin = r.Date_fin || r.date_fin || debut;
-          const agent = r.Agent || r.qui || 'Agent';
-          const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
-          const statutUpper = statutBrut.toUpperCase();
-          
-          let couleur = '#3788d8';
-          for (const [cle, val] of Object.entries(COULEURS)) {
-            if (statutUpper.includes(cle)) {
-              couleur = val;
-              break;
-            }
-          }
-
-          return {
-            id: r.id,
-            title: agent + (statutBrut ? ' — ' + statutBrut : ''),
-            start: debut,
-            end: addOneDay(fin),
-            backgroundColor: couleur,
-            borderColor: couleur,
-            allDay: true
-          };
-        });
-
-        calendar.removeAllEvents();
-        calendar.addEventSource(events);
-      });
-    });
-  </script>
-</body>
-</html>
+      grist.ready({ requiredAccess

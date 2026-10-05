@@ -24,6 +24,7 @@
       cursor: pointer;
       font-weight: 500;
     }
+    /* Modale de saisie */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -132,21 +133,21 @@
 
   <script>
     let calendar;
-    // Map globale : Row ID numérique -> Libellé affiché complet
+    // Map : ID numérique -> Libellé Identité
     const annuaireAgents = new Map();
-    let donneesRecues = [];
+    let recordsEnCache = [];
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',
-      'CONGES': '#fbc02d',
+      'CONFLIT': '#d32f2f',        // Rouge vif
+      'CONGES': '#fbc02d',         // Jaune
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',
+      'TELETRAVAIL': '#1976d2',    // Bleu
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00',
+      'EN DEPLACEMENT': '#f57c00', // Orange
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',
+      'PRESENT': '#388e3c',        // Vert
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'
+      'ASTREINTE': '#7b1fa2'       // Violet
     };
 
     function addOneDay(str) {
@@ -160,7 +161,7 @@
       return String(s || '').toUpperCase().trim();
     }
 
-    function nettoyerNom(val) {
+    function nettoyerTexte(val) {
       if (!val) return '';
       return String(val).replace(/^#Invalid Ref:\s*/i, '').trim();
     }
@@ -195,38 +196,34 @@
       }
     }
 
-    // Récupération automatique de la table des agents
-    async function chargerAnnuaireComplet() {
+    // Récupère la liste intégrale des agents depuis toutes les tables
+    async function chargerEquipeGlobale() {
       try {
         const tables = await grist.docApi.listTables();
-        for (const tableId of tables) {
+        for (const tId of tables) {
           try {
-            const data = await grist.docApi.fetchTable(tableId);
+            const data = await grist.docApi.fetchTable(tId);
             if (!data || !data.id || data.id.length === 0) continue;
 
-            const colonnes = Object.keys(data);
-            const colIdentite = colonnes.find(c => /^identit[eé]/i.test(c));
-            const colNom = colonnes.find(c => /^nom$/i.test(c) || /nom/i.test(c));
-            const colPrenom = colonnes.find(c => /pr[eé]nom/i.test(c));
-            const colFonction = colonnes.find(c => /fonction/i.test(c));
+            const cols = Object.keys(data);
+            const colIdentite = cols.find(c => /^identit[eé]/i.test(c));
+            const colNom = cols.find(c => /^nom$/i.test(c) || /nom/i.test(c));
+            const colPrenom = cols.find(c => /pr[eé]nom/i.test(c));
+            const colFonction = cols.find(c => /fonction/i.test(c));
 
-            // Si c'est bien la table contenant l'équipe
             if (colIdentite || (colNom && colPrenom)) {
               for (let i = 0; i < data.id.length; i++) {
                 const rowId = data.id[i];
                 let libelle = '';
 
-                if (colIdentite && data[colIdentite][i]) {
-                  const valId = data[colIdentite][i];
-                  if (typeof valId === 'string' && valId.trim()) {
-                    libelle = valId.trim();
-                  }
+                if (colIdentite && data[colIdentite][i] && typeof data[colIdentite][i] === 'string') {
+                  libelle = data[colIdentite][i].trim();
                 }
 
                 if (!libelle && colNom) {
-                  const n = (data[colNom] && data[colNom][i]) ? String(data[colNom][i]).trim() : '';
-                  const p = (colPrenom && data[colPrenom][i]) ? String(data[colPrenom][i]).trim() : '';
-                  const f = (colFonction && data[colFonction][i]) ? String(data[colFonction][i]).trim() : '';
+                  const n = data[colNom][i] ? String(data[colNom][i]).trim() : '';
+                  const p = colPrenom && data[colPrenom][i] ? String(data[colPrenom][i]).trim() : '';
+                  const f = colFonction && data[colFonction][i] ? String(data[colFonction][i]).trim() : '';
                   if (n) {
                     libelle = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
                   }
@@ -240,42 +237,48 @@
           } catch (e) {}
         }
       } catch (err) {
-        console.warn("Erreur listTables :", err);
+        console.warn("Erreur chargement équipe :", err);
       }
 
       rafraichirSelect();
-      if (donneesRecues.length > 0) {
-        afficherEvenements(donneesRecues);
+      if (recordsEnCache.length > 0) {
+        afficherEvenements(recordsEnCache);
       }
     }
 
-    // Résolution du nom d'un événement à partir de n'importe quel champ
-    function obtenirNomAgent(r) {
-      // 1. Recherche par Row ID direct
+    // Identifie l'agent de façon robuste (renvoie { id: number|null, nom: string })
+    function identifierAgent(r) {
+      // 1. Chercher un ID numérique
       let id = null;
-      if (typeof r.qui === 'number') id = r.qui;
-      else if (typeof r.Agent === 'number') id = r.Agent;
-      else if (r.qui && typeof r.qui === 'object' && r.qui.id) id = r.qui.id;
+      if (typeof r.Agent === 'number') id = r.Agent;
+      else if (typeof r.qui === 'number') id = r.qui;
       else if (r.Agent && typeof r.Agent === 'object' && r.Agent.id) id = r.Agent.id;
+      else if (r.qui && typeof r.qui === 'object' && r.qui.id) id = r.qui.id;
       else {
-        const parsed = parseInt(r.qui || r.Agent, 10);
-        if (!isNaN(parsed) && String(parsed) === String(r.qui || r.Agent).trim()) {
-          id = parsed;
+        const valStr = String(r.Agent || r.qui || '').trim();
+        if (/^\d+$/.test(valStr)) {
+          id = parseInt(valStr, 10);
         }
       }
 
+      // Si l'ID est connu dans l'annuaire
       if (id !== null && annuaireAgents.has(id)) {
-        return annuaireAgents.get(id);
+        return { id: id, nom: annuaireAgents.get(id) };
       }
 
-      // 2. Si c'est déjà une chaîne texte
+      // 2. Si un libellé texte propre est déjà présent dans une colonne
       const texte = r.Agent || r.qui;
-      if (typeof texte === 'string' && !/^\d+$/.test(texte.trim())) {
-        return nettoyerNom(texte);
+      if (typeof texte === 'string' && texte.trim() && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
+        const propre = nettoyerTexte(texte);
+        if (id !== null) annuaireAgents.set(id, propre);
+        return { id: id, nom: propre };
       }
 
-      // 3. Si l'ID n'est pas encore résolu
-      return (id !== null && annuaireAgents.has(id)) ? annuaireAgents.get(id) : ('Agent ' + (id || ''));
+      // 3. Fallback
+      if (id !== null) {
+        return { id: id, nom: 'Agent #' + id };
+      }
+      return { id: null, nom: nettoyerTexte(texte) || 'Agent' };
     }
 
     function afficherEvenements(records) {
@@ -285,19 +288,29 @@
       const events = valides.map((r, index, array) => {
         const debut = r.Date_debut || r.date_debut;
         const fin = r.Date_fin || r.date_fin || debut;
-        const nomComplet = obtenirNomAgent(r);
 
+        const infoAgent = identifierAgent(r);
+        const nomComplet = infoAgent.nom;
+
+        // Statut saisi
         const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
         const sNorm = normaliser(statutBrut);
         const statutConflitCol = normaliser(r.Statut_conflit);
 
-        // Détection de conflit : chevauchement de dates pour la même personne
-        // Exception tolérée : cumul ASTREINTE + (TELETRAVAIL / DEPLACEMENT / PRESENT)
+        // Détection de conflit :
+        // Même personne + même date
+        // SAUF si l'un est ASTREINTE et l'autre est TELETRAVAIL / EN DEPLACEMENT / PRESENT
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
 
-          const autreNom = obtenirNomAgent(autre);
-          if (autreNom !== nomComplet) return false;
+          const autreInfo = identifierAgent(autre);
+
+          // Vérification stricte de l'identité : soit même ID, soit même Nom
+          const memePersonne = (infoAgent.id && autreInfo.id) 
+            ? (infoAgent.id === autreInfo.id) 
+            : (nomComplet === autreInfo.nom && nomComplet !== 'Agent');
+
+          if (!memePersonne) return false;
 
           const autreDebut = autre.Date_debut || autre.date_debut;
           const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
@@ -309,6 +322,7 @@
           const unEstAstreinte = sNorm.includes('ASTREINTE');
           const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
 
+          // Règle d'exemption d'astreinte
           if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
           if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
 
@@ -318,11 +332,8 @@
         const estEnConflit = statutConflitCol.includes('CONFLIT') || doublonInterdit;
 
         let couleur = '#3788d8';
-        let libelleAffiche = statutBrut;
-
         if (estEnConflit) {
-          couleur = COULEURS['CONFLIT'];
-          libelleAffiche = 'CONFLIT';
+          couleur = COULEURS['CONFLIT']; // Rouge
         } else {
           for (const [cle, val] of Object.entries(COULEURS)) {
             if (sNorm.includes(cle)) {
@@ -332,9 +343,15 @@
           }
         }
 
+        // TITRE : On conserve toujours le statut saisi, et on ajoute [CONFLIT] s'il y a un souci !
+        let titreAffichage = nomComplet + (statutBrut ? ' — ' + statutBrut : '');
+        if (estEnConflit) {
+          titreAffichage += ' [CONFLIT]';
+        }
+
         return {
           id: r.id,
-          title: nomComplet + (libelleAffiche ? ' — ' + libelleAffiche : ''),
+          title: titreAffichage,
           start: debut,
           end: addOneDay(fin),
           backgroundColor: couleur,
@@ -364,13 +381,12 @@
         STATUT: statut
       };
 
-      // Tente d'enregistrer sur la colonne référence appropriée
       try {
-        await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
+        await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
         fermer();
       } catch (err) {
         try {
-          await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
+          await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
           fermer();
         } catch (e2) {
           console.error("Échec création :", e2);
@@ -406,7 +422,7 @@
           finCalculee.setDate(finCalculee.getDate() - 1);
           inputFin.value = finCalculee.toISOString().split('T')[0];
 
-          await chargerAnnuaireComplet();
+          await chargerEquipeGlobale();
           modalEl.style.display = 'flex';
         },
 
@@ -422,35 +438,24 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      // Charger l'annuaire dès le démarrage
-      chargerAnnuaireComplet();
+      // Charger l'annuaire au lancement
+      chargerEquipeGlobale();
 
       grist.onRecords(async function(records) {
         if (!records) return;
-        donneesRecues = records;
+        recordsEnCache = records;
 
-        // Mémorisation de secours : si un enregistrement possède déjà son libellé complet
-        records.forEach(r => {
-          const id = (typeof r.qui === 'number') ? r.qui : (typeof r.Agent === 'number' ? r.Agent : parseInt(r.qui || r.Agent, 10));
-          const texte = r.Agent || r.qui;
-          if (!isNaN(id) && typeof texte === 'string' && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
-            annuaireAgents.set(id, nettoyerNom(texte));
-          }
+        // Si l'annuaire n'a pas encore résolu tous les agents
+        const aDesNumerosNonResolus = records.some(r => {
+          const info = identifierAgent(r);
+          return info.nom.startsWith('Agent #') || info.nom === 'Agent';
         });
 
-        // Si des identifiants numériques restent non résolus, on relance la synchronisation
-        const aDesNumerosSeuls = records.some(r => {
-          const raw = r.qui || r.Agent;
-          const id = parseInt(raw, 10);
-          return !isNaN(id) && !annuaireAgents.has(id);
-        });
-
-        if (aDesNumerosSeuls) {
-          await chargerAnnuaireComplet();
-        } else {
-          rafraichirSelect();
-          afficherEvenements(records);
+        if (annuaireAgents.size === 0 || aDesNumerosNonResolus) {
+          await chargerEquipeGlobale();
         }
+
+        afficherEvenements(records);
       });
     });
   </script>

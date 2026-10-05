@@ -30,8 +30,8 @@
       const calendarEl = document.getElementById('calendar');
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
-        locale: 'fr', // Traduction en français (lun., mar., Aujourd'hui, Mois...)
-        firstDay: 1,  // Semaine débutant le lundi
+        locale: 'fr',
+        firstDay: 1,
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -47,15 +47,13 @@
       });
       calendar.render();
 
-      // Liaison avec les données Grist
       grist.ready({ requiredAccess: 'read table' });
       grist.onRecords(function(records) {
         const events = records.map(r => {
-          // Ajuste les noms des colonnes selon la structure exacte de la table
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin;
           const agent = r.Agent || r.qui || 'Événement';
-const statut = r.Statut || r.Statut_affiche || r.STATUT || '';
+          const statut = r.Statut || r.Statut_affiche || r.STATUT || '';
 
           // Couleurs selon les statuts
           let couleur = '#3788d8';
@@ -69,8 +67,6 @@ const statut = r.Statut || r.Statut_affiche || r.STATUT || '';
             id: r.id,
             title: agent + (statut ? ' - ' + statut : ''),
             start: debut,
-            // FullCalendar exclut le jour de fin sur les journées entières :
-            // si besoin, ajouter un jour à 'end' côté affichage
             end: fin,
             backgroundColor: couleur,
             borderColor: couleur,

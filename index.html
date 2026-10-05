@@ -23,12 +23,11 @@
       cursor: pointer;
       font-weight: 500;
     }
-    /* Fenêtre modale */
     #fenetre-voeu {
       display: none;
       position: fixed;
       top: 0; left: 0; width: 100vw; height: 100vh;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.45);
       z-index: 10000;
       align-items: center;
       justify-content: center;
@@ -130,17 +129,17 @@
 
   <script>
     let calendar;
-    const listeAgents = new Map(); // Stocke nom -> id d'enregistrement pour les références
+    const tableAgents = new Map(); // Nom affiché -> ID de référence
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',
-      'CONGES': '#fbc02d',
+      'CONFLIT': '#d32f2f',        // Rouge vif
+      'CONGES': '#fbc02d',         // Jaune
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',
+      'TELETRAVAIL': '#1976d2',    // Bleu
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00',
+      'EN DEPLACEMENT': '#f57c00', // Orange
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',
+      'PRESENT': '#388e3c',        // Vert
       'PRÉSENT': '#388e3c',
       'ASTREINTE': '#7b1fa2'
     };
@@ -159,6 +158,12 @@
       return d.toISOString().split('T')[0];
     }
 
+    // Nettoyage du préfixe d'erreur Grist s'il existe
+    function formaterNom(nomBrut) {
+      if (!nomBrut) return 'Agent';
+      return String(nomBrut).replace(/^#Invalid Ref:\s*/i, '').trim();
+    }
+
     const modalEl = document.getElementById('fenetre-voeu');
     const selectAgent = document.getElementById('form-agent');
     const selectStatut = document.getElementById('form-statut');
@@ -174,7 +179,7 @@
 
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const nomAgent = selectAgent.value;
-      const idOuNomAgent = listeAgents.get(nomAgent) || nomAgent;
+      const idRefAgent = tableAgents.get(nomAgent);
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
@@ -184,32 +189,25 @@
         return;
       }
 
+      // Construction des champs : on transmet l'ID numérique si disponible pour satisfaire la colonne de référence
+      const donnees = {
+        Date_debut: debut,
+        Date_fin: fin,
+        STATUT: statut
+      };
+
+      if (idRefAgent) {
+        donnees.qui = idRefAgent;
+      } else {
+        donnees.qui = nomAgent;
+      }
+
       try {
-        await grist.selectedTable.create({
-          fields: {
-            Date_debut: debut,
-            Date_fin: fin,
-            qui: idOuNomAgent,
-            STATUT: statut
-          }
-        });
+        await grist.selectedTable.create({ fields: donnees });
         fermer();
       } catch (err) {
-        console.error("Erreur Grist :", err);
-        // Deuxième essai avec d'autres identifiants de colonnes possibles
-        try {
-          await grist.selectedTable.create({
-            fields: {
-              date_debut: debut,
-              date_fin: fin,
-              Agent: nomAgent,
-              Statut: statut
-            }
-          });
-          fermer();
-        } catch (e2) {
-          alert("Erreur lors de l'enregistrement dans la table.");
-        }
+        console.error("Erreur de création :", err);
+        alert("Impossible d'enregistrer la ligne.");
       }
     });
 
@@ -222,7 +220,6 @@
         firstDay: 1,
         selectable: true,
         selectMirror: false,
-        allDayText: 'Programme journée',
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -234,14 +231,11 @@
           week: 'Semaine'
         },
 
-        // Clic ou sélection sur une plage de dates : ouverture de la modale
         select: function(info) {
           inputDebut.value = info.startStr;
-          // Si sélection d'une seule journée, endStr est le jour suivant : on recale
           const endCalcule = new Date(info.endStr);
           endCalcule.setDate(endCalcule.getDate() - 1);
           inputFin.value = endCalcule.toISOString().split('T')[0];
-          
           modalEl.style.display = 'flex';
         },
 
@@ -261,18 +255,24 @@
       grist.onRecords(function(records) {
         if (!records) return;
 
-        // Récupération des agents pour le menu déroulant
+        // 1. Mémorisation des agents valides et de leur ID de référence
         records.forEach(r => {
-          const texteAgent = r.Agent || r.qui;
-          if (texteAgent && typeof texteAgent === 'string' && texteAgent.trim()) {
-            listeAgents.set(texteAgent.trim(), r.qui);
+          const texte = r.Agent || r.qui;
+          if (texte && typeof texte === 'string' && !texte.startsWith('#Invalid Ref')) {
+            const nomPropre = texte.trim();
+            // Si la colonne 'qui' contient un ID numérique, on le lie au libellé
+            if (typeof r.qui === 'number') {
+              tableAgents.set(nomPropre, r.qui);
+            } else if (!tableAgents.has(nomPropre)) {
+              tableAgents.set(nomPropre, nomPropre);
+            }
           }
         });
 
-        // Mise à jour des options du select
+        // Mise à jour de la liste déroulante
         const agentCourant = selectAgent.value;
         selectAgent.innerHTML = '';
-        Array.from(listeAgents.keys()).sort().forEach(nom => {
+        Array.from(tableAgents.keys()).sort().forEach(nom => {
           const opt = document.createElement('option');
           opt.value = nom;
           opt.textContent = nom;
@@ -280,25 +280,52 @@
         });
         if (agentCourant) selectAgent.value = agentCourant;
 
-        // Construction des événements
-        const events = records.filter(r => (r.Date_debut || r.date_debut)).map(r => {
+        // 2. Traitement des événements et détection des conflits
+        // Un événement est en conflit si :
+        // - Son statut brut contient CONFLIT
+        // - Sa colonne calculée 'Statut_conflit' l'indique
+        // - Ou s'il partage le même agent et les mêmes dates qu'une autre entrée
+        const events = records.filter(r => (r.Date_debut || r.date_debut)).map((r, index, array) => {
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin || debut;
-          const agent = r.Agent || r.qui || 'Agent';
+          const nomComplet = formaterNom(r.Agent || r.qui);
+          
           const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
-          const statutUpper = statutBrut.toUpperCase();
+          const statutConflit = String(r.Statut_conflit || '').trim();
+
+          // Vérification si une autre ligne chevauche les mêmes dates pour cet agent
+          const doublonDetecte = array.some((autre, autreIdx) => {
+            if (index === autreIdx) return false;
+            const autreNom = formaterNom(autre.Agent || autre.qui);
+            if (autreNom !== nomComplet) return false;
+            const autreDebut = autre.Date_debut || autre.date_debut;
+            const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
+            return (debut <= autreFin && fin >= autreDebut);
+          });
+
+          const estEnConflit = statutBrut.toUpperCase().includes('CONFLIT') ||
+                              statutConflit.toUpperCase().includes('CONFLIT') ||
+                              doublonDetecte;
 
           let couleur = '#3788d8';
-          for (const [cle, val] of Object.entries(COULEURS)) {
-            if (statutUpper.includes(cle)) {
-              couleur = val;
-              break;
+          let libelleStatut = statutBrut;
+
+          if (estEnConflit) {
+            couleur = COULEURS['CONFLIT'];
+            libelleStatut = 'CONFLIT';
+          } else {
+            const statutUpper = statutBrut.toUpperCase();
+            for (const [cle, val] of Object.entries(COULEURS)) {
+              if (statutUpper.includes(cle)) {
+                couleur = val;
+                break;
+              }
             }
           }
 
           return {
             id: r.id,
-            title: agent + (statutBrut ? ' — ' + statutBrut : ''),
+            title: nomComplet + (libelleStatut ? ' — ' + libelleStatut : ''),
             start: debut,
             end: addOneDay(fin),
             backgroundColor: couleur,

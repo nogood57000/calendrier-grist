@@ -228,7 +228,6 @@
   <script>
     let calendar;
     const annuaireAgents = new Map();
-    let recordsEnCache = [];
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -294,10 +293,17 @@
       if (!ligneSelectionneeId) return;
       if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
         try {
-          await grist.selectedTable.destroy([ligneSelectionneeId]);
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
           fermer();
+          chargerToutesDonnees();
         } catch (err) {
-          alert("Impossible de supprimer la ligne.");
+          try {
+            await grist.selectedTable.destroy([ligneSelectionneeId]);
+            fermer();
+            chargerToutesDonnees();
+          } catch(e2) {
+            alert("Impossible de supprimer la ligne.");
+          }
         }
       }
     });
@@ -319,59 +325,58 @@
       }
     }
 
-    async function chargerEquipeGlobale() {
+    // Récupération directe depuis l'API document (insensible aux colonnes décochées)
+    async function chargerToutesDonnees() {
       try {
-        const tables = await grist.docApi.listTables();
-        for (const tId of tables) {
-          try {
-            const data = await grist.docApi.fetchTable(tId);
-            if (!data || !data.id || data.id.length === 0) continue;
-
-            const cols = Object.keys(data);
-            const colIdentite = cols.find(c => /^identit[eé]/i.test(c));
+        // 1. Charger l'annuaire d'équipe
+        try {
+          const eqData = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
+          if (eqData && eqData.id) {
+            annuaireAgents.clear();
+            const cols = Object.keys(eqData);
+            const colId = cols.find(c => /^identit[eé]/i.test(c));
             const colNom = cols.find(c => /^nom$/i.test(c) || /nom/i.test(c));
-            const colPrenom = cols.find(c => /pr[eé]nom/i.test(c));
-            const colFonction = cols.find(c => /fonction/i.test(c));
+            const colPre = cols.find(c => /pr[eé]nom/i.test(c));
+            const colFonc = cols.find(c => /fonction/i.test(c));
 
-            if (colIdentite || (colNom && colPrenom)) {
-              for (let i = 0; i < data.id.length; i++) {
-                const rowId = data.id[i];
-                let libelle = '';
-
-                if (colIdentite && data[colIdentite][i] && typeof data[colIdentite][i] === 'string') {
-                  libelle = data[colIdentite][i].trim();
-                }
-
-                if (!libelle && colNom) {
-                  const n = data[colNom][i] ? String(data[colNom][i]).trim() : '';
-                  const p = colPrenom && data[colPrenom][i] ? String(data[colPrenom][i]).trim() : '';
-                  const f = colFonction && data[colFonction][i] ? String(data[colFonction][i]).trim() : '';
-                  if (n) libelle = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
-                }
-
-                if (libelle && !libelle.startsWith('#')) {
-                  annuaireAgents.set(rowId, libelle);
-                }
+            for (let i = 0; i < eqData.id.length; i++) {
+              let lib = colId && eqData[colId][i] ? String(eqData[colId][i]).trim() : '';
+              if (!lib && colNom) {
+                const n = eqData[colNom][i] ? String(eqData[colNom][i]).trim() : '';
+                const p = colPre && eqData[colPre][i] ? String(eqData[colPre][i]).trim() : '';
+                const f = colFonc && eqData[colFonc][i] ? String(eqData[colFonc][i]).trim() : '';
+                if (n) lib = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
               }
+              if (lib) annuaireAgents.set(eqData.id[i], lib);
             }
-          } catch (e) {}
-        }
-      } catch (err) {}
+            rafraichirSelect();
+          }
+        } catch (e) {}
 
-      rafraichirSelect();
-      if (recordsEnCache.length > 0) {
-        afficherEvenements(recordsEnCache);
+        // 2. Charger les présences directement depuis la table Présences
+        const presData = await grist.docApi.fetchTable('Presences');
+        if (presData && presData.id) {
+          const rows = [];
+          for (let i = 0; i < presData.id.length; i++) {
+            const r = { id: presData.id[i] };
+            for (const col of Object.keys(presData)) {
+              r[col] = presData[col][i];
+            }
+            rows.push(r);
+          }
+          afficherEvenements(rows);
+        }
+      } catch (err) {
+        console.warn("Chargement autonome :", err);
       }
     }
 
     function identifierAgent(r) {
       let id = null;
-      if (typeof r.qui === 'number') id = r.qui;
-      else if (typeof r.Agent === 'number') id = r.Agent;
-      else if (r.qui && typeof r.qui === 'object' && r.qui.id) id = r.qui.id;
-      else if (r.Agent && typeof r.Agent === 'object' && r.Agent.id) id = r.Agent.id;
+      if (typeof r.Agent === 'number') id = r.Agent;
+      else if (typeof r.qui === 'number') id = r.qui;
       else {
-        const valStr = String(r.qui || r.Agent || '').trim();
+        const valStr = String(r.Agent || r.qui || '').trim();
         if (/^\d+$/.test(valStr)) id = parseInt(valStr, 10);
       }
 
@@ -395,7 +400,6 @@
     function afficherEvenements(records) {
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
-      // Filtre toutes les lignes ayant une date de début
       const valides = records.filter(r => {
         const d = parseDateStr(r.Date_debut || r.date_debut || r.DateDebut);
         return Boolean(d);
@@ -500,18 +504,19 @@
       try {
         if (ligneSelectionneeId) {
           try {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, qui: agentId } });
-          } catch(e) {
             await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, Agent: agentId } });
+          } catch(e) {
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, qui: agentId } });
           }
         } else {
           try {
-            await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
-          } catch (err) {
             await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
+          } catch (err) {
+            await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
           }
         }
         fermer();
+        chargerToutesDonnees();
       } catch (errGlobal) {
         alert("Impossible d'enregistrer.");
       }
@@ -571,8 +576,6 @@
           const props = info.event.extendedProps;
           ligneSelectionneeId = props.rowId;
 
-          grist.setCursorPos({ rowId: parseInt(ligneSelectionneeId, 10) });
-
           titreModal.textContent = "Modifier la présence";
           btnSupprimer.style.display = "inline-block";
 
@@ -581,19 +584,7 @@
 
           rafraichirSelect();
 
-          let cibleTrouvee = false;
-          if (props.agentId) {
-            selectAgent.value = String(props.agentId);
-            if (selectAgent.value === String(props.agentId)) cibleTrouvee = true;
-          }
-          if (!cibleTrouvee && props.nomAgent) {
-            for (let opt of selectAgent.options) {
-              if (opt.textContent === props.nomAgent) {
-                selectAgent.value = opt.value;
-                break;
-              }
-            }
-          }
+          if (props.agentId) selectAgent.value = String(props.agentId);
 
           const sInit = normaliser(props.statutInitial);
           for (let opt of selectStatut.options) {
@@ -612,25 +603,17 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      // Lancement en arrière-plan
-      chargerEquipeGlobale();
+      // Chargement direct des données au démarrage
+      chargerToutesDonnees();
 
+      // Écoute des mises à jour transmises par Grist
       grist.onRecords(function(records) {
-        if (!records) return;
-        recordsEnCache = records;
-
-        // Récupérer les noms directement depuis les lignes de présence
-        records.forEach(r => {
-          const id = (typeof r.qui === 'number') ? r.qui : (typeof r.Agent === 'number' ? r.Agent : parseInt(r.qui || r.Agent, 10));
-          const texte = r.Agent || r.qui;
-          if (!isNaN(id) && typeof texte === 'string' && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
-            annuaireAgents.set(id, nettoyerTexte(texte));
-          }
-        });
-
-        rafraichirSelect();
-        // Afficher immédiatement sans bloquer
-        afficherEvenements(records);
+        if (records && records.length > 0) {
+          afficherEvenements(records);
+        } else {
+          // Si Grist envoie une liste vide à cause des cases décochées, on recharge directement via l'API
+          chargerToutesDonnees();
+        }
       });
     });
   </script>

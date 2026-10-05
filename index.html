@@ -24,6 +24,7 @@
       cursor: pointer;
       font-weight: 500;
     }
+    /* Modale de saisie */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -132,19 +133,20 @@
 
   <script>
     let calendar;
-    const annuaireAgents = new Map(); // id (numérique) -> Identité complète
+    const annuaireAgents = new Map(); // id (numérique) -> "NOM Prénom - Fonction"
+    let derniersEnregistrements = [];
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',
-      'CONGES': '#fbc02d',
+      'CONFLIT': '#d32f2f',        // Rouge vif
+      'CONGES': '#fbc02d',         // Jaune
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',
+      'TELETRAVAIL': '#1976d2',    // Bleu
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00',
+      'EN DEPLACEMENT': '#f57c00', // Orange
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',
+      'PRESENT': '#388e3c',        // Vert
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'
+      'ASTREINTE': '#7b1fa2'       // Violet
     };
 
     function addOneDay(str) {
@@ -158,9 +160,9 @@
       return String(s || '').toUpperCase().trim();
     }
 
-    function formaterNom(nomBrut) {
-      if (!nomBrut) return '';
-      return String(nomBrut).replace(/^#Invalid Ref:\s*/i, '').trim();
+    function formaterTexte(v) {
+      if (!v) return '';
+      return String(v).replace(/^#Invalid Ref:\s*/i, '').trim();
     }
 
     const modalEl = document.getElementById('fenetre-voeu');
@@ -193,40 +195,132 @@
       }
     }
 
-    // Récupère l'équipe dans la table contenant la colonne Identité
+    // Récupère l'équipe dans la table dédiée
     async function chargerEquipeDTPJJ() {
       try {
         const tables = await grist.docApi.listTables();
         for (const tId of tables) {
-          const tIdNorm = tId.toUpperCase();
-          if (tIdNorm.includes('PREVISIONNEL') || tIdNorm.includes('CONGE')) continue;
+          if (/previsionnel|conge/i.test(tId)) continue;
 
           try {
             const data = await grist.docApi.fetchTable(tId);
             if (!data || !data.id || data.id.length === 0) continue;
 
             const cols = Object.keys(data);
-            // On cible spécifiquement la colonne "Identité" ou "Identite"
-            const colIdentite = cols.find(c => /^identit[eé]/i.test(c));
+            const colIdentite = cols.find(c => /identit/i.test(c));
+            const colNom = cols.find(c => /^nom$/i.test(c) || /nom/i.test(c));
+            const colPrenom = cols.find(c => /pr[eé]nom/i.test(c));
+            const colFonction = cols.find(c => /fonction/i.test(c));
 
-            if (colIdentite) {
+            if (colIdentite || (colNom && colPrenom)) {
               annuaireAgents.clear();
               for (let i = 0; i < data.id.length; i++) {
                 const rowId = data.id[i];
-                const identite = data[colIdentite][i];
-                if (identite && typeof identite === 'string' && identite.trim()) {
-                  annuaireAgents.set(rowId, identite.trim());
+                let libelle = '';
+
+                if (colIdentite && data[colIdentite][i] && typeof data[colIdentite][i] === 'string') {
+                  libelle = data[colIdentite][i].trim();
+                }
+                // Si la formule Identité n'est pas retournée en texte, on la compose directement
+                if (!libelle && colNom) {
+                  const n = data[colNom][i] || '';
+                  const p = colPrenom ? (data[colPrenom][i] || '') : '';
+                  const f = colFonction ? (data[colFonction][i] || '') : '';
+                  libelle = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
+                }
+
+                if (libelle) {
+                  annuaireAgents.set(rowId, libelle);
                 }
               }
               rafraichirSelect();
-              return; // Table cible trouvée
+              return;
             }
           } catch (e) {}
         }
       } catch (err) {
         console.warn("Erreur chargement équipe :", err);
       }
-      rafraichirSelect();
+    }
+
+    function resoudreNomAgent(r) {
+      const id = (typeof r.Agent === 'number') ? r.Agent : ((typeof r.qui === 'number') ? r.qui : parseInt(r.Agent || r.qui, 10));
+      if (!isNaN(id) && annuaireAgents.has(id)) {
+        return annuaireAgents.get(id);
+      }
+      const texte = r.Agent || r.qui;
+      if (typeof texte === 'string' && !/^\d+$/.test(texte.trim())) {
+        return formaterTexte(texte);
+      }
+      return 'Agent ' + (id || '');
+    }
+
+    function afficherEvenements(records) {
+      const valides = records.filter(r => (r.Date_debut || r.date_debut));
+      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+      const events = valides.map((r, index, array) => {
+        const debut = r.Date_debut || r.date_debut;
+        const fin = r.Date_fin || r.date_fin || debut;
+        const nomComplet = resoudreNomAgent(r);
+
+        const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
+        const sNorm = normaliser(statutBrut);
+        const statutConflitCol = normaliser(r.Statut_conflit);
+
+        // Détection de conflit : chevauchement sauf Astreinte + Présence/Télétravail/Déplacement
+        const doublonInterdit = array.some((autre, autreIdx) => {
+          if (index === autreIdx) return false;
+
+          const autreNom = resoudreNomAgent(autre);
+          if (autreNom !== nomComplet) return false;
+
+          const autreDebut = autre.Date_debut || autre.date_debut;
+          const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
+          const chevauchement = (debut <= autreFin && fin >= autreDebut);
+
+          if (!chevauchement) return false;
+
+          const autreSNorm = normaliser(autre.STATUT || autre.Statut || autre.Statut_affiche);
+          const unEstAstreinte = sNorm.includes('ASTREINTE');
+          const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
+
+          if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
+          if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
+
+          return true;
+        });
+
+        const estEnConflit = statutConflitCol.includes('CONFLIT') || doublonInterdit;
+
+        let couleur = '#3788d8';
+        let libelleAffiche = statutBrut;
+
+        if (estEnConflit) {
+          couleur = COULEURS['CONFLIT'];
+          libelleAffiche = 'CONFLIT';
+        } else {
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (sNorm.includes(cle)) {
+              couleur = val;
+              break;
+            }
+          }
+        }
+
+        return {
+          id: r.id,
+          title: nomComplet + (libelleAffiche ? ' — ' + libelleAffiche : ''),
+          start: debut,
+          end: addOneDay(fin),
+          backgroundColor: couleur,
+          borderColor: couleur,
+          allDay: true
+        };
+      });
+
+      calendar.removeAllEvents();
+      calendar.addEventSource(events);
     }
 
     document.getElementById('btn-valider').addEventListener('click', async function() {
@@ -303,85 +397,22 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      chargerEquipeDTPJJ();
-
-      grist.onRecords(function(records) {
+      // Réception des enregistrements
+      grist.onRecords(async function(records) {
         if (!records) return;
+        derniersEnregistrements = records;
 
-        // Préparation des événements
-        const valides = records.filter(r => (r.Date_debut || r.date_debut));
-        const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
-
-        const events = valides.map((r, index, array) => {
-          const debut = r.Date_debut || r.date_debut;
-          const fin = r.Date_fin || r.date_fin || debut;
-
-          const idAgent = (typeof r.Agent === 'number') ? r.Agent : ((typeof r.qui === 'number') ? r.qui : null);
-          const nomComplet = (idAgent && annuaireAgents.get(idAgent)) 
-            ? annuaireAgents.get(idAgent) 
-            : formaterNom(r.Agent || r.qui || 'Agent');
-
-          const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
-          const sNorm = normaliser(statutBrut);
-          const statutConflitCol = normaliser(r.Statut_conflit);
-
-          // Conflit si chevauchement sauf combinaison ASTREINTE + (TELETRAVAIL / DEPLACEMENT / PRESENT)
-          const doublonInterdit = array.some((autre, autreIdx) => {
-            if (index === autreIdx) return false;
-
-            const autreId = (typeof autre.Agent === 'number') ? autre.Agent : ((typeof autre.qui === 'number') ? autre.qui : null);
-            const autreNom = (autreId && annuaireAgents.get(autreId)) 
-              ? annuaireAgents.get(autreId) 
-              : formaterNom(autre.Agent || autre.qui);
-
-            if (autreNom !== nomComplet) return false;
-
-            const autreDebut = autre.Date_debut || autre.date_debut;
-            const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
-            const chevauchement = (debut <= autreFin && fin >= autreDebut);
-
-            if (!chevauchement) return false;
-
-            const autreSNorm = normaliser(autre.STATUT || autre.Statut || autre.Statut_affiche);
-            const unEstAstreinte = sNorm.includes('ASTREINTE');
-            const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
-
-            if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
-            if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
-
-            return true;
-          });
-
-          const estEnConflit = statutConflitCol.includes('CONFLIT') || doublonInterdit;
-
-          let couleur = '#3788d8';
-          let libelleAffiche = statutBrut;
-
-          if (estEnConflit) {
-            couleur = COULEURS['CONFLIT'];
-            libelleAffiche = 'CONFLIT';
-          } else {
-            for (const [cle, val] of Object.entries(COULEURS)) {
-              if (sNorm.includes(cle)) {
-                couleur = val;
-                break;
-              }
-            }
-          }
-
-          return {
-            id: r.id,
-            title: nomComplet + (libelleAffiche ? ' — ' + libelleAffiche : ''),
-            start: debut,
-            end: addOneDay(fin),
-            backgroundColor: couleur,
-            borderColor: couleur,
-            allDay: true
-          };
+        // Si l'annuaire est vide ou si un agent (ex: ID 5) n'est pas encore identifié
+        const idInconnu = records.some(r => {
+          const id = (typeof r.Agent === 'number') ? r.Agent : ((typeof r.qui === 'number') ? r.qui : parseInt(r.Agent || r.qui, 10));
+          return !isNaN(id) && id > 0 && !annuaireAgents.has(id);
         });
 
-        calendar.removeAllEvents();
-        calendar.addEventSource(events);
+        if (annuaireAgents.size === 0 || idInconnu) {
+          await chargerEquipeDTPJJ();
+        }
+
+        afficherEvenements(records);
       });
     });
   </script>

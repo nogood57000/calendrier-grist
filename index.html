@@ -90,7 +90,7 @@
 <body>
   <div id="calendar"></div>
 
-  <!-- Formulaire de saisie -->
+  <!-- Formulaire modal -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
@@ -130,19 +130,21 @@
 
   <script>
     let calendar;
+    // Map : libellé agent -> valeur à envoyer (ID ou nom)
     const mapAgents = new Map();
+    let nomColonneRef = 'Agent'; // Détecte dynamiquement la colonne agent
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',        // Rouge
-      'CONGES': '#fbc02d',         // Jaune
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TELETRAVAIL': '#1976d2',
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00', // Orange
+      'EN DEPLACEMENT': '#f57c00',
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',        // Vert
+      'PRESENT': '#388e3c',
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'       // Violet
+      'ASTREINTE': '#7b1fa2'
     };
 
     function addOneDay(str) {
@@ -175,25 +177,29 @@
     document.getElementById('btn-annuler').addEventListener('click', fermer);
 
     document.getElementById('btn-valider').addEventListener('click', async function() {
-      const agentIdStr = selectAgent.value;
+      const agentCle = selectAgent.value;
+      const valeurAgent = mapAgents.get(agentCle);
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
 
-      if (!debut || !fin) {
-        alert("Veuillez sélectionner des dates valides.");
+      if (!agentCle || !debut || !fin) {
+        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
         return;
       }
 
+      // Préparation de la ligne
       const champs = {
         Date_debut: debut,
         Date_fin: fin,
         STATUT: statut
       };
 
-      const idNumerique = parseInt(agentIdStr, 10);
-      if (!isNaN(idNumerique) && idNumerique > 0) {
-        champs.qui = idNumerique;
+      // Renseigne le champ agent sous les deux noms de colonnes possibles pour garantir l'enregistrement
+      if (valeurAgent !== undefined) {
+        champs[nomColonneRef] = valeurAgent;
+        if (nomColonneRef !== 'Agent') champs['Agent'] = valeurAgent;
+        if (nomColonneRef !== 'qui') champs['qui'] = valeurAgent;
       }
 
       try {
@@ -201,7 +207,15 @@
         fermer();
       } catch (err) {
         console.error("Erreur à la création :", err);
-        alert("Impossible d'enregistrer le vœu.");
+        // Deuxième essai sans forcer les alias
+        try {
+          const champsSimple = { Date_debut: debut, Date_fin: fin, STATUT: statut };
+          champsSimple[nomColonneRef] = valeurAgent;
+          await grist.selectedTable.create({ fields: champsSimple });
+          fermer();
+        } catch(e2) {
+          alert("Impossible d'enregistrer le vœu.");
+        }
       }
     });
 
@@ -225,7 +239,6 @@
           month: 'Mois',
           week: 'Semaine'
         },
-
         select: function(info) {
           inputDebut.value = info.startStr;
           const finCalculee = new Date(info.endStr);
@@ -233,13 +246,11 @@
           inputFin.value = finCalculee.toISOString().split('T')[0];
           modalEl.style.display = 'flex';
         },
-
         eventClick: function(info) {
           if (info.event.id) {
             grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
           }
         },
-
         events: []
       });
 
@@ -250,36 +261,52 @@
       grist.onRecords(function(records) {
         if (!records) return;
 
-        // Récupération des agents et de leur ID
+        // Détection automatique de la structure et des agents
         records.forEach(r => {
-          let idAgent = null;
-          if (typeof r.qui === 'number') {
-            idAgent = r.qui;
-          } else if (r.qui && typeof r.qui === 'object' && r.qui.id) {
-            idAgent = r.qui.id;
-          }
+          // Cherche dans toutes les colonnes possibles
+          const texteNom = formaterNom(r.Agent || r.qui || r.Membre);
+          
+          if (texteNom && texteNom !== 'Agent') {
+            // Détermine quelle valeur stocker (ID numérique ou objet ref ou texte)
+            let valeurRef = null;
+            if (typeof r.qui === 'number') {
+              valeurRef = r.qui;
+              nomColonneRef = 'qui';
+            } else if (typeof r.Agent === 'number') {
+              valeurRef = r.Agent;
+              nomColonneRef = 'Agent';
+            } else if (r.qui && typeof r.qui === 'object' && r.qui.id) {
+              valeurRef = r.qui.id;
+              nomColonneRef = 'qui';
+            } else if (r.Agent && typeof r.Agent === 'object' && r.Agent.id) {
+              valeurRef = r.Agent.id;
+              nomColonneRef = 'Agent';
+            } else {
+              valeurRef = texteNom;
+            }
 
-          const nomAffiche = r.Agent || (typeof r.qui === 'string' ? r.qui : null);
-          if (idAgent && nomAffiche && !String(nomAffiche).startsWith('#Invalid Ref')) {
-            mapAgents.set(idAgent, formaterNom(nomAffiche));
+            mapAgents.set(texteNom, valeurRef);
           }
         });
 
-        // Mise à jour des choix d'agents
-        const valeurCourante = selectAgent.value;
-        selectAgent.innerHTML = '';
-        Array.from(mapAgents.entries())
-          .sort((a, b) => a[1].localeCompare(b[1]))
-          .forEach(([id, nom]) => {
+        // Mise à jour de la liste déroulante du formulaire
+        const valeurSelectionnee = selectAgent.value;
+        selectAgent.innerHTML = '<option value="">-- Choisir un agent --</option>';
+        Array.from(mapAgents.keys())
+          .sort((a, b) => a.localeCompare(b))
+          .forEach(nom => {
             const opt = document.createElement('option');
-            opt.value = id;
+            opt.value = nom;
             opt.textContent = nom;
             selectAgent.appendChild(opt);
           });
-        if (valeurCourante) selectAgent.value = valeurCourante;
+        if (valeurSelectionnee && mapAgents.has(valeurSelectionnee)) {
+          selectAgent.value = valeurSelectionnee;
+        }
 
-        // Liste filtrée des enregistrements ayant des dates
+        // Préparation des événements du calendrier
         const valides = records.filter(r => (r.Date_debut || r.date_debut));
+        const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
         const events = valides.map((r, index, array) => {
           const debut = r.Date_debut || r.date_debut;
@@ -289,10 +316,6 @@
           const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
           const sNorm = normaliserStatut(statutBrut);
           const statutConflitCol = normaliserStatut(r.Statut_conflit);
-
-          // Détection de conflit avec les règles métier :
-          // L'ASTREINTE peut coexister avec TELETRAVAIL, EN DEPLACEMENT ou PRESENT
-          const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
           const doublonInterdit = array.some((autre, autreIdx) => {
             if (index === autreIdx) return false;
@@ -306,19 +329,12 @@
             if (!chevauchement) return false;
 
             const autreSNorm = normaliserStatut(autre.STATUT || autre.Statut || autre.Statut_affiche);
-
-            // Cas toléré : l'un est ASTREINTE et l'autre est dans la liste autorisée
             const unEstAstreinte = sNorm.includes('ASTREINTE');
             const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
 
-            if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) {
-              return false; // Pas de conflit
-            }
-            if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) {
-              return false; // Pas de conflit
-            }
+            if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
+            if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
 
-            // Tout autre chevauchement (ex: 2 présences, congé + télétravail, congé + astreinte) est un conflit
             return true;
           });
 

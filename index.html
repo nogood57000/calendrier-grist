@@ -24,7 +24,6 @@
       cursor: pointer;
       font-weight: 500;
     }
-    /* Modale de saisie */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -91,7 +90,7 @@
 <body>
   <div id="calendar"></div>
 
-  <!-- Formulaire de saisie -->
+  <!-- Formulaire modal -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
@@ -99,7 +98,7 @@
       <div class="champ">
         <label for="form-agent">Membre de l'équipe</label>
         <select id="form-agent">
-          <option value="">Chargement de l'équipe...</option>
+          <option value="">Chargement de la liste...</option>
         </select>
       </div>
 
@@ -133,21 +132,19 @@
 
   <script>
     let calendar;
-    // Map : ID de l'agent (numérique) -> Nom affiché
-    const mapAgents = new Map();
-    let donneesRecues = [];
+    const annuaireComplet = new Map(); // id (Row ID) -> Nom complet
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',        // Rouge vif
-      'CONGES': '#fbc02d',         // Jaune
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TELETRAVAIL': '#1976d2',
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00', // Orange
+      'EN DEPLACEMENT': '#f57c00',
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',        // Vert
+      'PRESENT': '#388e3c',
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'       // Violet
+      'ASTREINTE': '#7b1fa2'
     };
 
     function addOneDay(str) {
@@ -179,12 +176,11 @@
 
     document.getElementById('btn-annuler').addEventListener('click', fermer);
 
-    // Fonction de remplissage du menu déroulant
-    function actualiserSelectAgent() {
+    function rafraichirMenuDeroulant() {
       const selectionActuelle = selectAgent.value;
-      selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
+      selectAgent.innerHTML = '<option value="">-- Sélectionner un membre --</option>';
 
-      const tri = Array.from(mapAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+      const tri = Array.from(annuaireComplet.entries()).sort((a, b) => a[1].localeCompare(b[1]));
       for (const [id, nom] of tri) {
         const opt = document.createElement('option');
         opt.value = id;
@@ -192,47 +188,47 @@
         selectAgent.appendChild(opt);
       }
 
-      if (selectionActuelle && mapAgents.has(parseInt(selectionActuelle, 10))) {
+      if (selectionActuelle && annuaireComplet.has(parseInt(selectionActuelle, 10))) {
         selectAgent.value = selectionActuelle;
       }
     }
 
-    // Récupération automatique de TOUTE l'équipe depuis les tables Grist
-    async function chargerEquipeComplete() {
+    // Récupération systématique de tous les membres de l'équipe existants
+    async function synchroniserEquipe() {
       try {
         const tables = await grist.docApi.listTables();
-        for (const tId of tables) {
-          // On cherche la table des membres (ex: INSCRIRE DANS EQUIPE, Equipe, Agents, Membres...)
-          if (tId !== 'PREVISIONNEL_CONGES' && tId !== 'Table1') {
+        for (const nomTable of tables) {
+          // On évite la table de calendrier elle-même
+          if (!nomTable.toUpperCase().includes('PREVISIONNEL') && !nomTable.toUpperCase().includes('CONGE')) {
             try {
-              const tableData = await grist.docApi.fetchTable(tId);
-              if (tableData && tableData.id && tableData.id.length > 0) {
-                // Recherche de la colonne contenant les noms
-                const cles = Object.keys(tableData).filter(k => k !== 'id' && !k.startsWith('manualSort'));
-                const cleNom = cles.find(k => /nom|agent|membre|identite|qui/i.test(k)) || cles[0];
+              const data = await grist.docApi.fetchTable(nomTable);
+              if (data && data.id && data.id.length > 0) {
+                // Trouver la colonne textuelle du nom (ex: Nom, Agent, Identite...)
+                const cols = Object.keys(data).filter(c => c !== 'id' && !c.startsWith('manualSort'));
+                const colNom = cols.find(c => /nom|agent|membre|identite|titre/i.test(c)) || cols[0];
 
-                if (cleNom) {
-                  for (let i = 0; i < tableData.id.length; i++) {
-                    const rowId = tableData.id[i];
-                    const val = tableData[cleNom][i];
-                    if (val && typeof val === 'string' && val.trim()) {
-                      mapAgents.set(rowId, val.trim());
+                if (colNom) {
+                  for (let i = 0; i < data.id.length; i++) {
+                    const rowId = data.id[i];
+                    const nom = data[colNom][i];
+                    if (nom && typeof nom === 'string' && nom.trim()) {
+                      annuaireComplet.set(rowId, nom.trim());
                     }
                   }
                 }
               }
-            } catch (errTable) {
-              // Ignore et teste la suivante
+            } catch (e) {
+              // Ignore la table si non compatible
             }
           }
         }
       } catch (err) {
-        console.warn("Lecture tables via API :", err);
+        console.warn("Erreur synchronisation équipe :", err);
       }
-      actualiserSelectAgent();
+      rafraichirMenuDeroulant();
     }
 
-    // Enregistrement d'un nouveau vœu
+    // Validation et écriture dans Grist
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentId = parseInt(selectAgent.value, 10);
       const statut = selectStatut.value;
@@ -240,11 +236,11 @@
       const fin = inputFin.value;
 
       if (isNaN(agentId) || !debut || !fin) {
-        alert("Veuillez sélectionner un membre de l'équipe et les dates.");
+        alert("Veuillez choisir un membre de l'équipe et renseigner les dates.");
         return;
       }
 
-      // On tente d'enregistrer avec les deux variantes de noms de colonne possibles
+      // On cible en priorité la colonne référence (qui ou Agent)
       try {
         await grist.selectedTable.create({
           fields: {
@@ -266,9 +262,9 @@
             }
           });
           fermer();
-        } catch (e2) {
-          console.error("Erreur création :", e2);
-          alert("Erreur lors de l'enregistrement dans la table.");
+        } catch (err2) {
+          console.error("Échec création :", err2);
+          alert("Erreur lors de la création de la ligne.");
         }
       }
     });
@@ -293,18 +289,24 @@
           month: 'Mois',
           week: 'Semaine'
         },
-        select: function(info) {
+
+        // À l'ouverture de la boîte, on resynchronise la liste des agents
+        select: async function(info) {
           inputDebut.value = info.startStr;
           const finCalculee = new Date(info.endStr);
           finCalculee.setDate(finCalculee.getDate() - 1);
           inputFin.value = finCalculee.toISOString().split('T')[0];
+          
+          await synchroniserEquipe();
           modalEl.style.display = 'flex';
         },
+
         eventClick: function(info) {
           if (info.event.id) {
             grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
           }
         },
+
         events: []
       });
 
@@ -312,24 +314,21 @@
 
       grist.ready({ requiredAccess: 'full' });
 
-      // Charger l'équipe globale immédiatement
-      chargerEquipeComplete();
+      synchroniserEquipe();
 
       grist.onRecords(function(records) {
         if (!records) return;
-        donneesRecues = records;
 
-        // Récupération de secours à partir des enregistrements déjà liés
+        // Sauvegarde de secours des noms d'agents depuis les enregistrements
         records.forEach(r => {
-          const texteNom = formaterNom(r.Agent);
           const id = (typeof r.qui === 'number') ? r.qui : (typeof r.Agent === 'number' ? r.Agent : null);
-          if (id && texteNom) {
-            mapAgents.set(id, texteNom);
+          const nom = formaterNom(r.Agent);
+          if (id && nom) {
+            annuaireComplet.set(id, nom);
           }
         });
-        actualiserSelectAgent();
+        rafraichirMenuDeroulant();
 
-        // Traitement des événements
         const valides = records.filter(r => (r.Date_debut || r.date_debut));
         const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
@@ -337,20 +336,19 @@
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin || debut;
           
-          // Récupération du nom
           const idAgent = (typeof r.qui === 'number') ? r.qui : (typeof r.Agent === 'number' ? r.Agent : null);
-          const nomComplet = (idAgent && mapAgents.get(idAgent)) ? mapAgents.get(idAgent) : formaterNom(r.Agent || r.qui || 'Agent');
+          const nomComplet = (idAgent && annuaireComplet.get(idAgent)) ? annuaireComplet.get(idAgent) : formaterNom(r.Agent || r.qui || 'Agent');
 
           const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
           const sNorm = normaliserStatut(statutBrut);
           const statutConflitCol = normaliserStatut(r.Statut_conflit);
 
-          // Règle conflit : chevauchement interdit sauf cumul Astreinte + (Télétravail / Déplacement / Présent)
+          // Règle de conflit : doublons interdits sauf Astreinte + Présence/Télétravail/Déplacement
           const doublonInterdit = array.some((autre, autreIdx) => {
             if (index === autreIdx) return false;
-            
+
             const autreId = (typeof autre.qui === 'number') ? autre.qui : (typeof autre.Agent === 'number' ? autre.Agent : null);
-            const autreNom = (autreId && mapAgents.get(autreId)) ? mapAgents.get(autreId) : formaterNom(autre.Agent || autre.qui);
+            const autreNom = (autreId && annuaireComplet.get(autreId)) ? annuaireComplet.get(autreId) : formaterNom(autre.Agent || autre.qui);
             
             if (autreNom !== nomComplet) return false;
 

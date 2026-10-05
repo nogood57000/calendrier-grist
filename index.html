@@ -18,7 +18,7 @@
       overflow: hidden;
     }
 
-    /* Barre de légende en haut */
+    /* Barre de légende */
     #barre-legende {
       display: flex;
       flex-wrap: wrap;
@@ -54,13 +54,13 @@
       height: 100%;
     }
 
-    /* --- ÉPAISSEUR DES BARRES & RETOUR À LA LIGNE --- */
+    /* Épaisseur et retour à la ligne */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
-      white-space: normal !important; /* Autorise le retour à la ligne */
-      min-height: 38px !important;    /* Rend la barre plus épaisse en hauteur */
-      margin-bottom: 4px !important;  /* Espace entre les barres */
+      white-space: normal !important;
+      min-height: 38px !important;
+      margin-bottom: 4px !important;
       border-radius: 5px !important;
       border: none !important;
       box-shadow: 0 1px 3px rgba(0,0,0,0.18);
@@ -95,10 +95,10 @@
     .event-ligne-nom {
       font-size: 11px;
       font-weight: 600;
-      word-break: break-word; /* Coupe les mots trop longs si nécessaire */
+      word-break: break-word;
     }
 
-    /* Fenêtre modale de saisie */
+    /* Modale de saisie / modification */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -140,9 +140,13 @@
     }
     .barre-boutons {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+    }
+    .groupe-actions-droite {
+      display: flex;
       gap: 8px;
-      margin-top: 18px;
     }
     .btn {
       padding: 7px 14px;
@@ -159,6 +163,13 @@
     .btn-bleu {
       background: #0284c7;
       color: #ffffff;
+    }
+    .btn-rouge {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+    .btn-rouge:hover {
+      background: #fecaca;
     }
   </style>
 </head>
@@ -179,10 +190,10 @@
     <div id="calendar"></div>
   </div>
 
-  <!-- Formulaire modal de saisie -->
+  <!-- Formulaire modal (Création / Modification / Suppression) -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
-      <h3>Nouveau vœu de présence</h3>
+      <h3 id="titre-modal">Nouveau vœu de présence</h3>
       
       <div class="champ">
         <label for="form-agent">Membre de l'équipe</label>
@@ -213,28 +224,32 @@
       </div>
 
       <div class="barre-boutons">
-        <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
-        <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
+        <button type="button" class="btn btn-rouge" id="btn-supprimer" style="display: none;">Supprimer</button>
+        <div class="groupe-actions-droite">
+          <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
+          <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
+        </div>
       </div>
     </div>
   </div>
 
   <script>
     let calendar;
-    const annuaireAgents = new Map(); // id numérique -> nom complet
+    const annuaireAgents = new Map(); // id (entier) -> nom complet
     let recordsEnCache = [];
+    let ligneSelectionneeId = null; // null = Création, sinon Row ID Grist pour Modification
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',        // Rouge vif
-      'CONGES': '#fbc02d',         // Jaune
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TELETRAVAIL': '#1976d2',
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00', // Orange
+      'EN DEPLACEMENT': '#f57c00',
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',        // Vert
+      'PRESENT': '#388e3c',
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'       // Violet
+      'ASTREINTE': '#7b1fa2'
     };
 
     function addOneDay(str) {
@@ -254,17 +269,35 @@
     }
 
     const modalEl = document.getElementById('fenetre-voeu');
+    const titreModal = document.getElementById('titre-modal');
     const selectAgent = document.getElementById('form-agent');
     const selectStatut = document.getElementById('form-statut');
     const inputDebut = document.getElementById('form-debut');
     const inputFin = document.getElementById('form-fin');
+    const btnSupprimer = document.getElementById('btn-supprimer');
 
     function fermer() {
       modalEl.style.display = 'none';
+      ligneSelectionneeId = null;
+      btnSupprimer.style.display = 'none';
       if (calendar) calendar.unselect();
     }
 
     document.getElementById('btn-annuler').addEventListener('click', fermer);
+
+    // Supprimer l'événement cliqué
+    btnSupprimer.addEventListener('click', async function() {
+      if (!ligneSelectionneeId) return;
+      if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
+        try {
+          await grist.selectedTable.destroy([ligneSelectionneeId]);
+          fermer();
+        } catch (err) {
+          console.error("Erreur suppression :", err);
+          alert("Impossible de supprimer la ligne.");
+        }
+      }
+    });
 
     function rafraichirSelect() {
       const choixActuel = selectAgent.value;
@@ -417,7 +450,7 @@
         const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : (statutBrut || 'PRESENCE');
 
         return {
-          id: r.id,
+          id: String(r.id),
           title: `[${badgeTexte}] ${nomComplet}`,
           start: debut,
           end: addOneDay(fin),
@@ -425,8 +458,13 @@
           borderColor: couleur,
           allDay: true,
           extendedProps: {
+            rowId: r.id,
+            agentId: infoAgent.id,
+            statutInitial: statutBrut,
             statutBadge: badgeTexte,
             nomAgent: nomComplet,
+            debutReel: debut,
+            finReelle: fin,
             estConflit: estEnConflit,
             periodeTexte: `${debut} au ${fin}`
           }
@@ -437,6 +475,7 @@
       calendar.addEventSource(events);
     }
 
+    // Enregistrement : Création OU Modification selon ligneSelectionneeId
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentId = parseInt(selectAgent.value, 10);
       const statut = selectStatut.value;
@@ -444,7 +483,7 @@
       const fin = inputFin.value;
 
       if (isNaN(agentId) || !debut || !fin) {
-        alert("Veuillez sélectionner un membre de l'équipe et les dates.");
+        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
         return;
       }
 
@@ -455,15 +494,25 @@
       };
 
       try {
-        await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
-        fermer();
-      } catch (err) {
-        try {
-          await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
-          fermer();
-        } catch (e2) {
-          alert("Erreur lors de l'enregistrement.");
+        if (ligneSelectionneeId) {
+          // --- MODE MODIFICATION ---
+          try {
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, Agent: agentId } });
+          } catch(e) {
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: { ...champs, qui: agentId } });
+          }
+        } else {
+          // --- MODE CRÉATION ---
+          try {
+            await grist.selectedTable.create({ fields: { ...champs, Agent: agentId } });
+          } catch (err) {
+            await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
+          }
         }
+        fermer();
+      } catch (errGlobal) {
+        console.error("Erreur enregistrement :", errGlobal);
+        alert("Impossible d'enregistrer les modifications.");
       }
     });
 
@@ -488,14 +537,13 @@
           week: 'Semaine'
         },
 
-        // Rendu sur 2 lignes distinctes dans la barre épaisse
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
           const nom = arg.event.extendedProps.nomAgent || arg.event.title;
           
           const conteneur = document.createElement('div');
           conteneur.className = 'event-card';
-          conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}`;
+          conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}\n(Cliquez pour modifier ou supprimer)`;
 
           conteneur.innerHTML = `
             <div><span class="event-ligne-statut">${badge}</span></div>
@@ -504,7 +552,12 @@
           return { domNodes: [conteneur] };
         },
 
+        // CLIC SUR UNE CASE VIDE -> CRÉATION
         select: async function(info) {
+          ligneSelectionneeId = null;
+          titreModal.textContent = "Nouveau vœu de présence";
+          btnSupprimer.style.display = "none";
+
           inputDebut.value = info.startStr;
           const finCalculee = new Date(info.endStr);
           finCalculee.setDate(finCalculee.getDate() - 1);
@@ -514,10 +567,38 @@
           modalEl.style.display = 'flex';
         },
 
-        eventClick: function(info) {
-          if (info.event.id) {
-            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
+        // CLIC SUR UNE BARRE EXISTANTE (OU EN CONFLIT) -> MODIFICATION DIRECTE
+        eventClick: async function(info) {
+          const props = info.event.extendedProps;
+          ligneSelectionneeId = props.rowId;
+
+          // Met à jour la sélection de la ligne dans Grist
+          grist.setCursorPos({ rowId: parseInt(ligneSelectionneeId, 10) });
+
+          // Adapter la modale en mode modification
+          titreModal.textContent = "Modifier la présence";
+          btnSupprimer.style.display = "inline-block";
+
+          inputDebut.value = props.debutReel;
+          inputFin.value = props.finReelle;
+
+          await chargerEquipeGlobale();
+
+          // Pré-remplir l'agent
+          if (props.agentId) {
+            selectAgent.value = String(props.agentId);
           }
+
+          // Pré-remplir le statut initial réel (même en conflit)
+          const sInit = (props.statutInitial || '').toUpperCase().trim();
+          for (let opt of selectStatut.options) {
+            if (sInit.includes(opt.value)) {
+              selectStatut.value = opt.value;
+              break;
+            }
+          }
+
+          modalEl.style.display = 'flex';
         },
 
         events: []

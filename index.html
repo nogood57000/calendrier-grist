@@ -228,6 +228,7 @@
   <script>
     let calendar;
     const annuaireAgents = new Map();
+    let dernieresLignesEnCache = [];
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -285,22 +286,16 @@
 
     document.getElementById('btn-annuler').addEventListener('click', fermer);
 
-    // Suppression d'un vœu
     btnSupprimer.addEventListener('click', async function() {
       if (!ligneSelectionneeId) return;
       if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
         try {
-          await grist.selectedTable.destroy([ligneSelectionneeId]);
-        } catch (e1) {
-          try {
-            await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
-          } catch (e2) {
-            alert("Erreur lors de la suppression.");
-            return;
-          }
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          fermer();
+          await chargerDepuisGrist();
+        } catch (err) {
+          alert("Erreur lors de la suppression.");
         }
-        fermer();
-        await toutCharger();
       }
     });
 
@@ -321,84 +316,63 @@
       }
     }
 
-    function getVal(row, noms) {
-      for (const n of noms) {
-        if (row[n] !== undefined && row[n] !== null) return row[n];
-        const lower = n.toLowerCase();
-        for (const k of Object.keys(row)) {
-          if (k.toLowerCase() === lower && row[k] !== undefined && row[k] !== null) return row[k];
-        }
-      }
-      return null;
-    }
-
-    async function chargerAnnuaire() {
+    async function chargerDepuisGrist() {
       try {
-        const rawEq = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
-        if (rawEq) {
+        // 1. Charger l'annuaire d'équipe
+        const eqData = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
+        if (eqData && eqData.id) {
           annuaireAgents.clear();
-          const ids = rawEq.id || [];
+          const ids = eqData.id;
           for (let i = 0; i < ids.length; i++) {
-            const nom = rawEq.Nom ? (rawEq.Nom[i] || '') : '';
-            const prenom = rawEq.Prenom ? (rawEq.Prenom[i] || '') : '';
-            const fonc = rawEq.Fonction ? (rawEq.Fonction[i] || '') : '';
+            const nom = eqData.Nom ? (eqData.Nom[i] || '') : '';
+            const prenom = eqData.Prenom ? (eqData.Prenom[i] || '') : '';
+            const fonc = eqData.Fonction ? (eqData.Fonction[i] || '') : '';
             const ident = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${ids[i]}`;
             annuaireAgents.set(ids[i], ident);
           }
           rafraichirSelect();
         }
-      } catch(e) {
-        console.warn("Chargement équipe :", e);
-      }
-    }
 
-    async function toutCharger() {
-      await chargerAnnuaire();
-
-      let lignes = [];
-
-      try {
-        const raw = await grist.docApi.fetchTable('Presences');
-        if (raw && raw.id) {
-          const cols = Object.keys(raw);
-          for (let i = 0; i < raw.id.length; i++) {
-            const r = { id: raw.id[i] };
-            for (const c of cols) {
-              r[c] = raw[c][i];
-            }
-            lignes.push(r);
+        // 2. Charger la table Presences
+        const pData = await grist.docApi.fetchTable('Presences');
+        if (pData && pData.id && pData.id.length > 0) {
+          const rows = [];
+          for (let i = 0; i < pData.id.length; i++) {
+            rows.push({
+              id: pData.id[i],
+              qui: pData.qui ? pData.qui[i] : null,
+              Date_debut: pData.Date_debut ? pData.Date_debut[i] : null,
+              Date_fin: pData.Date_fin ? pData.Date_fin[i] : null,
+              STATUT: pData.STATUT ? pData.STATUT[i] : '',
+              Statut_conflit: pData.Statut_conflit ? pData.Statut_conflit[i] : 'OK'
+            });
           }
+          dernieresLignesEnCache = rows;
+          afficherEvenements(rows);
+        } else if (dernieresLignesEnCache.length > 0) {
+          afficherEvenements(dernieresLignesEnCache);
         }
-      } catch(e) {}
-
-      if (lignes.length === 0) {
-        try {
-          const selected = await grist.docApi.fetchSelectedTable();
-          if (Array.isArray(selected) && selected.length > 0) lignes = selected;
-        } catch(e) {}
+      } catch (err) {
+        console.warn("Chargement depuis Grist :", err);
       }
-
-      afficherEvenements(lignes);
     }
 
     function afficherEvenements(records) {
+      if (!records || records.length === 0) return;
+
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
       const valides = records.map(r => {
-        const dDebut = parseDateStr(getVal(r, ['Date_debut', 'date_debut', 'DateDebut']));
-        const dFin = parseDateStr(getVal(r, ['Date_fin', 'date_fin', 'DateFin'])) || dDebut;
-        const q = getVal(r, ['qui', 'Agent', 'agent']);
-        const agentId = (typeof q === 'number') ? q : (q && q.id ? q.id : parseInt(q, 10));
-        const statut = String(getVal(r, ['STATUT', 'Statut', 'statut']) || '').trim();
-        const statutConf = String(getVal(r, ['Statut_conflit', 'statut_conflit', 'Statut2']) || 'OK').trim();
-
+        const dDebut = parseDateStr(r.Date_debut);
+        const dFin = parseDateStr(r.Date_fin) || dDebut;
+        const agentId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
         return {
           id: r.id,
           agentId: isNaN(agentId) ? null : agentId,
           debut: dDebut,
           fin: dFin,
-          statut: statut,
-          statutConflit: statutConf
+          statut: String(r.STATUT || '').trim(),
+          statutConflit: String(r.Statut_conflit || 'OK').trim()
         };
       }).filter(r => Boolean(r.debut));
 
@@ -466,7 +440,6 @@
       calendar.addEventSource(events);
     }
 
-    // ENREGISTREMENT (Création ou Mise à jour)
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentId = parseInt(selectAgent.value, 10);
       const statut = selectStatut.value;
@@ -478,11 +451,10 @@
         return;
       }
 
-      // Conversion timestamp Unix entier (secondes à midi UTC)
       const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
       const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
 
-      const champsGrist = {
+      const fields = {
         qui: agentId,
         STATUT: statut,
         Date_debut: tsDebut,
@@ -491,34 +463,13 @@
 
       try {
         if (ligneSelectionneeId) {
-          // Mise à jour de la ligne
-          try {
-            await grist.selectedTable.update({
-              id: ligneSelectionneeId,
-              fields: champsGrist
-            });
-          } catch (e1) {
-            await grist.docApi.applyUserActions([
-              ['UpdateRecord', 'Presences', ligneSelectionneeId, champsGrist]
-            ]);
-          }
+          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fields]]);
         } else {
-          // Création d'une nouvelle ligne
-          try {
-            await grist.selectedTable.create({
-              fields: champsGrist
-            });
-          } catch (e2) {
-            await grist.docApi.applyUserActions([
-              ['AddRecord', 'Presences', null, champsGrist]
-            ]);
-          }
+          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fields]]);
         }
-
         fermer();
-        await toutCharger();
+        await chargerDepuisGrist();
       } catch (err) {
-        console.error("Erreur enregistrement :", err);
         alert("Erreur lors de l'enregistrement dans Grist.");
       }
     });
@@ -527,7 +478,13 @@
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
+        initialView: 'timeGridWeek',
+        views: {
+          timeGridWeek: {
+            type: 'dayGrid',
+            duration: { days: 7 }
+          }
+        },
         locale: 'fr',
         firstDay: 1,
         selectable: true,
@@ -536,7 +493,7 @@
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,dayGridWeek'
+          right: 'dayGridMonth,timeGridWeek'
         },
         buttonText: {
           today: "Aujourd'hui",
@@ -605,13 +562,24 @@
 
       grist.ready({ requiredAccess: 'full' });
 
-      toutCharger();
+      // Chargement initial
+      chargerDepuisGrist();
 
-      grist.onRecords(function() {
-        toutCharger();
+      // Écoute Grist : ne vide JAMAIS le calendrier si Grist envoie un tableau vide
+      grist.onRecords(function(records) {
+        if (records && records.length > 0 && records[0].Date_debut) {
+          afficherEvenements(records);
+        } else {
+          chargerDepuisGrist();
+        }
       });
 
-      window.addEventListener('focus', toutCharger);
+      // Forcer le rechargement dès que l'utilisateur revient sur la page ou clique dessus
+      window.addEventListener('focus', chargerDepuisGrist);
+      document.addEventListener('visibilitychange', function() {
+        if (!document.hidden) chargerDepuisGrist();
+      });
+      window.addEventListener('pageshow', chargerDepuisGrist);
     });
   </script>
 </body>

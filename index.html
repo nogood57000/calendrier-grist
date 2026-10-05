@@ -293,17 +293,10 @@
       if (!ligneSelectionneeId) return;
       if (confirm("Voulez-vous vraiment supprimer cette plage de présence ?")) {
         try {
-          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          await grist.selectedTable.destroy([ligneSelectionneeId]);
           fermer();
-          await synchroniserDonneesDirectes();
         } catch (err) {
-          try {
-            await grist.selectedTable.destroy([ligneSelectionneeId]);
-            fermer();
-            await synchroniserDonneesDirectes();
-          } catch(e2) {
-            alert("Impossible de supprimer la ligne.");
-          }
+          alert("Impossible de supprimer la ligne.");
         }
       }
     });
@@ -325,50 +318,41 @@
       }
     }
 
-    // Récupération directe de l'équipe et des présences sans dépendre de l'état des cases à cocher
-    async function synchroniserDonneesDirectes() {
+    async function chargerAnnuaireEquipe() {
       try {
-        // 1. Charger l'annuaire d'équipe
-        try {
-          const eqData = await grist.docApi.fetchTable('Equipes_en_DTPJJ_de_Moselle');
-          if (eqData && eqData.id) {
-            annuaireAgents.clear();
-            const cols = Object.keys(eqData);
+        const tables = await grist.docApi.listTables();
+        for (const tId of tables) {
+          if (/presence|conge/i.test(tId)) continue;
+          try {
+            const data = await grist.docApi.fetchTable(tId);
+            if (!data || !data.id || data.id.length === 0) continue;
+
+            const cols = Object.keys(data);
             const colId = cols.find(c => /^identit[eé]/i.test(c));
             const colNom = cols.find(c => /^nom$/i.test(c) || /nom/i.test(c));
             const colPre = cols.find(c => /pr[eé]nom/i.test(c));
             const colFonc = cols.find(c => /fonction/i.test(c));
 
-            for (let i = 0; i < eqData.id.length; i++) {
-              let lib = colId && eqData[colId][i] ? String(eqData[colId][i]).trim() : '';
-              if (!lib && colNom) {
-                const n = eqData[colNom][i] ? String(eqData[colNom][i]).trim() : '';
-                const p = colPre && eqData[colPre][i] ? String(eqData[colPre][i]).trim() : '';
-                const f = colFonc && eqData[colFonc][i] ? String(eqData[colFonc][i]).trim() : '';
-                if (n) lib = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
+            if (colId || (colNom && colPre)) {
+              annuaireAgents.clear();
+              for (let i = 0; i < data.id.length; i++) {
+                let lib = colId && data[colId][i] ? String(data[colId][i]).trim() : '';
+                if (!lib && colNom) {
+                  const n = data[colNom][i] ? String(data[colNom][i]).trim() : '';
+                  const p = colPre && data[colPre][i] ? String(data[colPre][i]).trim() : '';
+                  const f = colFonc && data[colFonc][i] ? String(data[colFonc][i]).trim() : '';
+                  if (n) lib = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
+                }
+                if (lib && !lib.startsWith('#')) {
+                  annuaireAgents.set(data.id[i], lib);
+                }
               }
-              if (lib) annuaireAgents.set(eqData.id[i], lib);
+              rafraichirSelect();
+              return;
             }
-            rafraichirSelect();
-          }
-        } catch (e) {}
-
-        // 2. Charger les présences
-        const presData = await grist.docApi.fetchTable('Presences');
-        if (presData && presData.id) {
-          const rows = [];
-          for (let i = 0; i < presData.id.length; i++) {
-            const r = { id: presData.id[i] };
-            for (const col of Object.keys(presData)) {
-              r[col] = presData[col][i];
-            }
-            rows.push(r);
-          }
-          afficherEvenements(rows);
+          } catch(e) {}
         }
-      } catch (err) {
-        console.warn("Erreur chargement direct :", err);
-      }
+      } catch (err) {}
     }
 
     function identifierAgent(r) {
@@ -516,13 +500,12 @@
           }
         }
         fermer();
-        await synchroniserDonneesDirectes();
       } catch (errGlobal) {
         alert("Impossible d'enregistrer.");
       }
     });
 
-    document.addEventListener('DOMContentLoaded', async function() {
+    document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -602,21 +585,34 @@
 
       calendar.render();
 
-      // Enregistrement officiel des colonnes auprès de Grist pour éviter le décochage automatique
+      // DÉCLARATION FORMELLE DES COLONNES POUR VERROUILLER LE MAPPING DANS GRIST
       grist.ready({
-        requiredAccess: 'full'
+        requiredAccess: 'full',
+        columns: [
+          { name: 'Agent', title: "Agent", optional: false },
+          { name: 'Date_debut', title: "Date de début", optional: false },
+          { name: 'Date_fin', title: "Date de fin", optional: false },
+          { name: 'STATUT', title: "Statut", optional: false },
+          { name: 'Statut_conflit', title: "Statut conflit", optional: true }
+        ]
       });
 
-      // Synchronisation directe immédiate au chargement du calendrier
-      await synchroniserDonneesDirectes();
+      chargerAnnuaireEquipe();
 
-      // Rafraîchissement automatique en cas d'édition
       grist.onRecords(function(records) {
-        if (records && records.length > 0 && records[0].Date_debut) {
-          afficherEvenements(records);
-        } else {
-          synchroniserDonneesDirectes();
-        }
+        if (!records) return;
+
+        // Récupérer les identités si déjà présentes
+        records.forEach(r => {
+          const id = (typeof r.Agent === 'number') ? r.Agent : ((typeof r.qui === 'number') ? r.qui : parseInt(r.Agent || r.qui, 10));
+          const texte = r.Agent || r.qui;
+          if (!isNaN(id) && typeof texte === 'string' && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
+            annuaireAgents.set(id, nettoyerTexte(texte));
+          }
+        });
+
+        rafraichirSelect();
+        afficherEvenements(records);
       });
     });
   </script>

@@ -1,6 +1,177 @@
-document.getElementById('btn-valider').addEventListener('click', async function() {
-      const nomAgent = selectAgent.value;
-      const refAgent = tableAgents.get(nomAgent);
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.10/locales/fr.global.min.js"></script>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      height: 100%;
+      overflow: hidden;
+      background: #ffffff;
+    }
+    #calendar {
+      height: 100vh;
+      padding: 8px;
+      box-sizing: border-box;
+    }
+    .fc-event {
+      cursor: pointer;
+      font-weight: 500;
+    }
+    #fenetre-voeu {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; width: 100vw; height: 100vh;
+      background: rgba(0, 0, 0, 0.45);
+      z-index: 10000;
+      align-items: center;
+      justify-content: center;
+    }
+    .conteneur-formulaire {
+      background: #ffffff;
+      padding: 22px;
+      border-radius: 8px;
+      width: 320px;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+    }
+    .conteneur-formulaire h3 {
+      margin: 0 0 16px 0;
+      font-size: 16px;
+      color: #1e293b;
+    }
+    .champ {
+      margin-bottom: 12px;
+    }
+    .champ label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 4px;
+      color: #475569;
+    }
+    .champ input, .champ select {
+      width: 100%;
+      padding: 7px 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      box-sizing: border-box;
+      font-size: 13px;
+    }
+    .barre-boutons {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 18px;
+    }
+    .btn {
+      padding: 7px 14px;
+      border-radius: 4px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    .btn-gris {
+      background: #e2e8f0;
+      color: #334155;
+    }
+    .btn-bleu {
+      background: #0284c7;
+      color: #ffffff;
+    }
+  </style>
+</head>
+<body>
+  <div id="calendar"></div>
+
+  <!-- Formulaire de saisie -->
+  <div id="fenetre-voeu">
+    <div class="conteneur-formulaire">
+      <h3>Nouveau vœu de présence</h3>
+      
+      <div class="champ">
+        <label for="form-agent">Membre de l'équipe</label>
+        <select id="form-agent"></select>
+      </div>
+
+      <div class="champ">
+        <label for="form-statut">Statut</label>
+        <select id="form-statut">
+          <option value="CONGES">CONGES</option>
+          <option value="TELETRAVAIL">TELETRAVAIL</option>
+          <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
+          <option value="PRESENT">PRESENT</option>
+          <option value="CONFLIT">CONFLIT</option>
+        </select>
+      </div>
+
+      <div class="champ">
+        <label for="form-debut">Date de début</label>
+        <input type="date" id="form-debut" />
+      </div>
+
+      <div class="champ">
+        <label for="form-fin">Date de fin</label>
+        <input type="date" id="form-fin" />
+      </div>
+
+      <div class="barre-boutons">
+        <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
+        <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let calendar;
+    // Map pour stocker : ID numérique Grist -> Nom affiché
+    const mapAgents = new Map();
+
+    const COULEURS = {
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
+      'CONGÉS': '#fbc02d',
+      'TELETRAVAIL': '#1976d2',
+      'TÉLÉTRAVAIL': '#1976d2',
+      'EN DEPLACEMENT': '#f57c00',
+      'DÉPLACEMENT': '#f57c00',
+      'PRESENT': '#388e3c',
+      'PRÉSENT': '#388e3c',
+      'ASTREINTE': '#7b1fa2'
+    };
+
+    function addOneDay(str) {
+      if (!str) return str;
+      const d = new Date(str);
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    }
+
+    function formaterNom(nomBrut) {
+      if (!nomBrut) return 'Agent';
+      return String(nomBrut).replace(/^#Invalid Ref:\s*/i, '').trim();
+    }
+
+    const modalEl = document.getElementById('fenetre-voeu');
+    const selectAgent = document.getElementById('form-agent');
+    const selectStatut = document.getElementById('form-statut');
+    const inputDebut = document.getElementById('form-debut');
+    const inputFin = document.getElementById('form-fin');
+
+    function fermer() {
+      modalEl.style.display = 'none';
+      if (calendar) calendar.unselect();
+    }
+
+    document.getElementById('btn-annuler').addEventListener('click', fermer);
+
+    document.getElementById('btn-valider').addEventListener('click', async function() {
+      const agentIdStr = selectAgent.value;
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
@@ -10,22 +181,155 @@ document.getElementById('btn-valider').addEventListener('click', async function(
         return;
       }
 
-      // Si l'identifiant numérique de référence est connu, on l'utilise, sinon on omet le champ pour éviter l'InvalidTypedValue
+      // Préparation de l'objet pour Grist
       const champs = {
         Date_debut: debut,
         Date_fin: fin,
         STATUT: statut
       };
 
-      if (typeof refAgent === 'number') {
-        champs.qui = refAgent;
+      // Injection de la référence numérique
+      const idNumerique = parseInt(agentIdStr, 10);
+      if (!isNaN(idNumerique) && idNumerique > 0) {
+        champs.qui = idNumerique;
       }
 
       try {
         await grist.selectedTable.create({ fields: champs });
         fermer();
       } catch (err) {
-        console.error("Erreur de création :", err);
-        alert("Impossible d'enregistrer la ligne.");
+        console.error("Erreur à la création :", err);
+        alert("Impossible d'enregistrer le vœu.");
       }
     });
+
+    document.addEventListener('DOMContentLoaded', function() {
+      const calendarEl = document.getElementById('calendar');
+
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'fr',
+        firstDay: 1,
+        selectable: true,
+        selectMirror: false,
+        allDayText: 'Programme journée',
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,dayGridWeek'
+        },
+        buttonText: {
+          today: "Aujourd'hui",
+          month: 'Mois',
+          week: 'Semaine'
+        },
+
+        select: function(info) {
+          inputDebut.value = info.startStr;
+          const finCalculee = new Date(info.endStr);
+          finCalculee.setDate(finCalculee.getDate() - 1);
+          inputFin.value = finCalculee.toISOString().split('T')[0];
+          modalEl.style.display = 'flex';
+        },
+
+        eventClick: function(info) {
+          if (info.event.id) {
+            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
+          }
+        },
+
+        events: []
+      });
+
+      calendar.render();
+
+      grist.ready({ requiredAccess: 'full' });
+
+      grist.onRecords(function(records) {
+        if (!records) return;
+
+        // 1. Remplissage des agents avec leur véritable ID de référence Grist
+        records.forEach(r => {
+          // Dans Grist, pour une colonne Ref, r.qui est l'ID (nombre) ou l'objet {id: X}
+          let idAgent = null;
+          if (typeof r.qui === 'number') {
+            idAgent = r.qui;
+          } else if (r.qui && typeof r.qui === 'object' && r.qui.id) {
+            idAgent = r.qui.id;
+          }
+
+          const nomAffiche = r.Agent || (typeof r.qui === 'string' ? r.qui : null);
+          if (idAgent && nomAffiche && !String(nomAffiche).startsWith('#Invalid Ref')) {
+            mapAgents.set(idAgent, formaterNom(nomAffiche));
+          }
+        });
+
+        // Mise à jour des options du sélecteur
+        const valeurCourante = selectAgent.value;
+        selectAgent.innerHTML = '';
+        Array.from(mapAgents.entries())
+          .sort((a, b) => a[1].localeCompare(b[1]))
+          .forEach(([id, nom]) => {
+            const opt = document.createElement('option');
+            opt.value = id; // La valeur HTML est l'identifiant numérique attendu par Grist
+            opt.textContent = nom; // Le texte visible est le nom de l'agent
+            selectAgent.appendChild(opt);
+          });
+        if (valeurCourante) selectAgent.value = valeurCourante;
+
+        // 2. Préparation des événements
+        const events = records.filter(r => (r.Date_debut || r.date_debut)).map((r, index, array) => {
+          const debut = r.Date_debut || r.date_debut;
+          const fin = r.Date_fin || r.date_fin || debut;
+          const nomComplet = formaterNom(r.Agent || r.qui);
+          
+          const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
+          const statutConflit = String(r.Statut_conflit || '').trim();
+
+          const doublonDetecte = array.some((autre, autreIdx) => {
+            if (index === autreIdx) return false;
+            const autreNom = formaterNom(autre.Agent || autre.qui);
+            if (autreNom !== nomComplet) return false;
+            const autreDebut = autre.Date_debut || autre.date_debut;
+            const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
+            return (debut <= autreFin && fin >= autreDebut);
+          });
+
+          const estEnConflit = statutBrut.toUpperCase().includes('CONFLIT') ||
+                              statutConflit.toUpperCase().includes('CONFLIT') ||
+                              doublonDetecte;
+
+          let couleur = '#3788d8';
+          let libelleStatut = statutBrut;
+
+          if (estEnConflit) {
+            couleur = COULEURS['CONFLIT'];
+            libelleStatut = 'CONFLIT';
+          } else {
+            const statutUpper = statutBrut.toUpperCase();
+            for (const [cle, val] of Object.entries(COULEURS)) {
+              if (statutUpper.includes(cle)) {
+                couleur = val;
+                break;
+              }
+            }
+          }
+
+          return {
+            id: r.id,
+            title: nomComplet + (libelleStatut ? ' — ' + libelleStatut : ''),
+            start: debut,
+            end: addOneDay(fin),
+            backgroundColor: couleur,
+            borderColor: couleur,
+            allDay: true
+          };
+        });
+
+        calendar.removeAllEvents();
+        calendar.addEventSource(events);
+      });
+    });
+  </script>
+</body>
+</html>

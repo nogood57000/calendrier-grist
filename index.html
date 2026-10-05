@@ -295,12 +295,12 @@
         try {
           await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
           fermer();
-          chargerToutesDonnees();
+          await synchroniserDonneesDirectes();
         } catch (err) {
           try {
             await grist.selectedTable.destroy([ligneSelectionneeId]);
             fermer();
-            chargerToutesDonnees();
+            await synchroniserDonneesDirectes();
           } catch(e2) {
             alert("Impossible de supprimer la ligne.");
           }
@@ -325,8 +325,8 @@
       }
     }
 
-    // Récupération directe depuis l'API document (insensible aux colonnes décochées)
-    async function chargerToutesDonnees() {
+    // Récupération directe de l'équipe et des présences sans dépendre de l'état des cases à cocher
+    async function synchroniserDonneesDirectes() {
       try {
         // 1. Charger l'annuaire d'équipe
         try {
@@ -353,7 +353,7 @@
           }
         } catch (e) {}
 
-        // 2. Charger les présences directement depuis la table Présences
+        // 2. Charger les présences
         const presData = await grist.docApi.fetchTable('Presences');
         if (presData && presData.id) {
           const rows = [];
@@ -367,7 +367,7 @@
           afficherEvenements(rows);
         }
       } catch (err) {
-        console.warn("Chargement autonome :", err);
+        console.warn("Erreur chargement direct :", err);
       }
     }
 
@@ -516,13 +516,13 @@
           }
         }
         fermer();
-        chargerToutesDonnees();
+        await synchroniserDonneesDirectes();
       } catch (errGlobal) {
         alert("Impossible d'enregistrer.");
       }
     });
 
-    document.addEventListener('DOMContentLoaded', function() {
+    document.addEventListener('DOMContentLoaded', async function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -601,18 +601,21 @@
       });
 
       calendar.render();
-      grist.ready({ requiredAccess: 'full' });
 
-      // Chargement direct des données au démarrage
-      chargerToutesDonnees();
+      // Enregistrement officiel des colonnes auprès de Grist pour éviter le décochage automatique
+      grist.ready({
+        requiredAccess: 'full'
+      });
 
-      // Écoute des mises à jour transmises par Grist
+      // Synchronisation directe immédiate au chargement du calendrier
+      await synchroniserDonneesDirectes();
+
+      // Rafraîchissement automatique en cas d'édition
       grist.onRecords(function(records) {
-        if (records && records.length > 0) {
+        if (records && records.length > 0 && records[0].Date_debut) {
           afficherEvenements(records);
         } else {
-          // Si Grist envoie une liste vide à cause des cases décochées, on recharge directement via l'API
-          chargerToutesDonnees();
+          synchroniserDonneesDirectes();
         }
       });
     });

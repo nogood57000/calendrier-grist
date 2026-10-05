@@ -165,9 +165,6 @@
       background: #fee2e2;
       color: #b91c1c;
     }
-    .btn-rouge:hover {
-      background: #fecaca;
-    }
   </style>
 </head>
 <body>
@@ -230,7 +227,7 @@
 
   <script>
     let calendar;
-    const annuaireAgents = new Map(); // ID numérique -> Nom complet
+    const annuaireAgents = new Map();
     let recordsEnCache = [];
     let ligneSelectionneeId = null;
 
@@ -246,6 +243,19 @@
       'PRÉSENT': '#388e3c',
       'ASTREINTE': '#7b1fa2'
     };
+
+    function parseDateStr(v) {
+      if (!v) return null;
+      if (typeof v === 'string') {
+        const m = v.match(/^\d{4}-\d{2}-\d{2}/);
+        if (m) return m[0];
+      }
+      if (typeof v === 'number') {
+        const d = new Date(v * 1000);
+        return d.toISOString().split('T')[0];
+      }
+      return null;
+    }
 
     function addOneDay(str) {
       if (!str) return str;
@@ -287,7 +297,6 @@
           await grist.selectedTable.destroy([ligneSelectionneeId]);
           fermer();
         } catch (err) {
-          console.error("Erreur suppression :", err);
           alert("Impossible de supprimer la ligne.");
         }
       }
@@ -337,9 +346,7 @@
                   const n = data[colNom][i] ? String(data[colNom][i]).trim() : '';
                   const p = colPrenom && data[colPrenom][i] ? String(data[colPrenom][i]).trim() : '';
                   const f = colFonction && data[colFonction][i] ? String(data[colFonction][i]).trim() : '';
-                  if (n) {
-                    libelle = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
-                  }
+                  if (n) libelle = `${n} ${p}${f ? ' - ' + f : ''}`.trim();
                 }
 
                 if (libelle && !libelle.startsWith('#')) {
@@ -349,11 +356,12 @@
             }
           } catch (e) {}
         }
-      } catch (err) {
-        console.warn("Erreur chargement équipe :", err);
-      }
+      } catch (err) {}
 
       rafraichirSelect();
+      if (recordsEnCache.length > 0) {
+        afficherEvenements(recordsEnCache);
+      }
     }
 
     function identifierAgent(r) {
@@ -374,11 +382,8 @@
       const texte = r.Agent || r.qui;
       if (typeof texte === 'string' && texte.trim() && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
         const propre = nettoyerTexte(texte);
-        // Retrouver l'ID si le nom figure dans l'annuaire
         for (const [aId, aNom] of annuaireAgents.entries()) {
-          if (aNom === propre) {
-            return { id: aId, nom: propre };
-          }
+          if (aNom === propre) return { id: aId, nom: propre };
         }
         return { id: id, nom: propre };
       }
@@ -388,19 +393,24 @@
     }
 
     function afficherEvenements(records) {
-      const valides = records.filter(r => (r.Date_debut || r.date_debut));
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
+      // Filtre toutes les lignes ayant une date de début
+      const valides = records.filter(r => {
+        const d = parseDateStr(r.Date_debut || r.date_debut || r.DateDebut);
+        return Boolean(d);
+      });
+
       const events = valides.map((r, index, array) => {
-        const debut = r.Date_debut || r.date_debut;
-        const fin = r.Date_fin || r.date_fin || debut;
+        const debut = parseDateStr(r.Date_debut || r.date_debut || r.DateDebut);
+        const fin = parseDateStr(r.Date_fin || r.date_fin || r.DateFin) || debut;
 
         const infoAgent = identifierAgent(r);
         const nomComplet = infoAgent.nom;
 
-        const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
+        const statutBrut = String(r.STATUT || r.Statut || r.statut || '').trim();
         const sNorm = normaliser(statutBrut);
-        const statutConflitCol = normaliser(r.Statut_conflit);
+        const statutConflitCol = normaliser(r.Statut_conflit || r.statut_conflit);
 
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
@@ -412,13 +422,13 @@
 
           if (!memePersonne) return false;
 
-          const autreDebut = autre.Date_debut || autre.date_debut;
-          const autreFin = autre.Date_fin || autre.date_fin || autreDebut;
+          const autreDebut = parseDateStr(autre.Date_debut || autre.date_debut || autre.DateDebut);
+          const autreFin = parseDateStr(autre.Date_fin || autre.date_fin || autre.DateFin) || autreDebut;
           const chevauchement = (debut <= autreFin && fin >= autreDebut);
 
           if (!chevauchement) return false;
 
-          const autreSNorm = normaliser(autre.STATUT || autre.Statut || autre.Statut_affiche);
+          const autreSNorm = normaliser(autre.STATUT || autre.Statut || autre.statut);
           const unEstAstreinte = sNorm.includes('ASTREINTE');
           const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
 
@@ -503,12 +513,11 @@
         }
         fermer();
       } catch (errGlobal) {
-        console.error("Erreur enregistrement :", errGlobal);
-        alert("Impossible d'enregistrer les modifications.");
+        alert("Impossible d'enregistrer.");
       }
     });
 
-    document.addEventListener('DOMContentLoaded', async function() {
+    document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -570,10 +579,8 @@
           inputDebut.value = props.debutReel;
           inputFin.value = props.finReelle;
 
-          // Remplir le sélecteur d'agent sans le réinitialiser
           rafraichirSelect();
 
-          // Ciblage exact par ID ou par nom
           let cibleTrouvee = false;
           if (props.agentId) {
             selectAgent.value = String(props.agentId);
@@ -588,7 +595,6 @@
             }
           }
 
-          // Ciblage du statut
           const sInit = normaliser(props.statutInitial);
           for (let opt of selectStatut.options) {
             if (sInit.includes(opt.value)) {
@@ -606,16 +612,24 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      await chargerEquipeGlobale();
+      // Lancement en arrière-plan
+      chargerEquipeGlobale();
 
-      grist.onRecords(async function(records) {
+      grist.onRecords(function(records) {
         if (!records) return;
         recordsEnCache = records;
 
-        if (annuaireAgents.size === 0) {
-          await chargerEquipeGlobale();
-        }
+        // Récupérer les noms directement depuis les lignes de présence
+        records.forEach(r => {
+          const id = (typeof r.qui === 'number') ? r.qui : (typeof r.Agent === 'number' ? r.Agent : parseInt(r.qui || r.Agent, 10));
+          const texte = r.Agent || r.qui;
+          if (!isNaN(id) && typeof texte === 'string' && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
+            annuaireAgents.set(id, nettoyerTexte(texte));
+          }
+        });
 
+        rafraichirSelect();
+        // Afficher immédiatement sans bloquer
         afficherEvenements(records);
       });
     });

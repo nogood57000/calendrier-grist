@@ -55,7 +55,7 @@
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin;
           const agent = r.Agent || r.qui || 'Événement';
-          const statut = r.Statut || r.Statut_affiche || '';
+const statut = r.Statut || r.Statut_affiche || r.STATUT || '';
 
           // Couleurs selon les statuts
           let couleur = '#3788d8';

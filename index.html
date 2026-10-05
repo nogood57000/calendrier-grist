@@ -53,19 +53,30 @@
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin;
           const agent = r.Agent || r.qui || 'Événement';
-          const statut = r.Statut || r.Statut_affiche || r.STATUT || '';
+          
+          // Recherche insensible au nom exact de la colonne (Statut, Statut_affiche, STATUT, etc.)
+          let statutBrut = r.Statut || r.Statut_affiche || r.Statut_conflit || r.STATUT || '';
+          
+          // Nettoyage de la chaîne
+          let statut = String(statutBrut).trim().toUpperCase();
 
-          // Couleurs selon les statuts
-          let couleur = '#3788d8';
-          if (statut === 'CONFLIT') couleur = '#d32f2f';
-          else if (statut === 'CONGES') couleur = '#fbc02d';
-          else if (statut === 'TELETRAVAIL') couleur = '#1976d2';
-          else if (statut === 'EN DEPLACEMENT') couleur = '#f57c00';
-          else if (statut === 'PRESENT') couleur = '#388e3c';
+          // Attribution des couleurs
+          let couleur = '#3788d8'; // Bleu par défaut
+          if (statut.includes('CONFLIT')) {
+            couleur = '#d32f2f'; // Rouge
+          } else if (statut.includes('CONGES') || statut.includes('CONGÉS')) {
+            couleur = '#e6af00'; // Jaune / Ambre foncé (lisible sur fond clair)
+          } else if (statut.includes('TELETRAVAIL') || statut.includes('TÉLÉTRAVAIL')) {
+            couleur = '#1976d2'; // Bleu soutenu
+          } else if (statut.includes('DEPLACEMENT') || statut.includes('DÉPLACEMENT')) {
+            couleur = '#f57c00'; // Orange
+          } else if (statut.includes('PRESENT') || statut.includes('PRÉSENT')) {
+            couleur = '#388e3c'; // Vert
+          }
 
           return {
             id: r.id,
-            title: agent + (statut ? ' - ' + statut : ''),
+            title: agent + (statutBrut ? ' - ' + statutBrut : ''),
             start: debut,
             end: fin,
             backgroundColor: couleur,

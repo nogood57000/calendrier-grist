@@ -9,14 +9,18 @@
     html, body {
       margin: 0;
       padding: 0;
-      font-family: sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       height: 100%;
       overflow: hidden;
     }
     #calendar {
       height: 100vh;
-      padding: 8px;
+      padding: 10px;
       box-sizing: border-box;
+    }
+    .fc-event {
+      cursor: pointer;
+      font-weight: 500;
     }
   </style>
 </head>
@@ -25,60 +29,117 @@
 
   <script>
     let calendar;
+    let tableMappings = {};
+
+    // Couleurs fixes pour chaque statut
+    const COULEURS = {
+      'CONFLIT': '#d32f2f',        // Rouge vif
+      'CONGES': '#fbc02d',         // Jaune
+      'CONGÉS': '#fbc02d',
+      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TÉLÉTRAVAIL': '#1976d2',
+      'EN DEPLACEMENT': '#f57c00', // Orange
+      'DÉPLACEMENT': '#f57c00',
+      'PRESENT': '#388e3c',        // Vert
+      'PRÉSENT': '#388e3c',
+      'ASTREINTE': '#7b1fa2'       // Violet
+    };
+
+    // Ajustement de la date de fin (FullCalendar exclut le dernier jour en allDay)
+    function addOneDay(dateStr) {
+      if (!dateStr) return dateStr;
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() + 1);
+      return d.toISOString().split('T')[0];
+    }
+
+    function removeOneDay(dateStr) {
+      if (!dateStr) return dateStr;
+      const d = new Date(dateStr);
+      d.setDate(d.getDate() - 1);
+      return d.toISOString().split('T')[0];
+    }
 
     document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
+
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'fr',
         firstDay: 1,
+        editable: false,
+        selectable: true, // Permet de cliquer ou glisser pour créer un vœu
+        selectMirror: true,
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,timeGridWeek,timeGridDay'
+          right: 'dayGridMonth,timeGridWeek'
         },
         buttonText: {
           today: "Aujourd'hui",
           month: 'Mois',
-          week: 'Semaine',
-          day: 'Jour'
+          week: 'Semaine'
         },
+
+        // Action au clic ou glisser sur une case vide pour créer une ligne
+        select: async function(info) {
+          const debut = info.startStr;
+          // FullCalendar renvoie le jour suivant comme borne de fin : on retire 1 jour pour Grist
+          const fin = removeOneDay(info.endStr);
+
+          try {
+            await grist.selectedTable.create({
+              fields: {
+                Date_debut: debut,
+                Date_fin: fin,
+                STATUT: 'CONGES' // Statut par défaut à la création
+              }
+            });
+          } catch (err) {
+            console.error("Erreur de création :", err);
+          }
+          calendar.unselect();
+        },
+
+        // Clic sur un événement existant : sélectionne la ligne dans la table Grist
+        eventClick: function(info) {
+          if (info.event.id) {
+            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
+          }
+        },
+
         events: []
       });
+
       calendar.render();
 
-      grist.ready({ requiredAccess: 'read table' });
-      grist.onRecords(function(records) {
-        const events = records.map(r => {
-          const debut = r.Date_debut || r.date_debut;
-          const fin = r.Date_fin || r.date_fin;
-          const agent = r.Agent || r.qui || 'Événement';
-          
-          // Recherche insensible au nom exact de la colonne (Statut, Statut_affiche, STATUT, etc.)
-          let statutBrut = r.Statut || r.Statut_affiche || r.Statut_conflit || r.STATUT || '';
-          
-          // Nettoyage de la chaîne
-          let statut = String(statutBrut).trim().toUpperCase();
+      // Autorisation en lecture et écriture pour permettre l'ajout de vœux
+      grist.ready({ requiredAccess: 'full' });
 
-          // Attribution des couleurs
-          let couleur = '#3788d8'; // Bleu par défaut
-          if (statut.includes('CONFLIT')) {
-            couleur = '#d32f2f'; // Rouge
-          } else if (statut.includes('CONGES') || statut.includes('CONGÉS')) {
-            couleur = '#e6af00'; // Jaune / Ambre foncé (lisible sur fond clair)
-          } else if (statut.includes('TELETRAVAIL') || statut.includes('TÉLÉTRAVAIL')) {
-            couleur = '#1976d2'; // Bleu soutenu
-          } else if (statut.includes('DEPLACEMENT') || statut.includes('DÉPLACEMENT')) {
-            couleur = '#f57c00'; // Orange
-          } else if (statut.includes('PRESENT') || statut.includes('PRÉSENT')) {
-            couleur = '#388e3c'; // Vert
+      // Réception des enregistrements Grist
+      grist.onRecords(function(records) {
+        const events = records.filter(r => (r.Date_debut || r.date_debut)).map(r => {
+          const debut = r.Date_debut || r.date_debut;
+          const fin = r.Date_fin || r.date_fin || debut;
+          const agent = r.Agent || r.qui || 'Agent';
+          
+          // Recherche du statut pour la couleur
+          const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
+          const statutUpper = statutBrut.toUpperCase();
+          
+          let couleur = '#3788d8';
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (statutUpper.includes(cle)) {
+              couleur = val;
+              break;
+            }
           }
 
           return {
             id: r.id,
-            title: agent + (statutBrut ? ' - ' + statutBrut : ''),
+            title: agent + (statutBrut ? ' — ' + statutBrut : ''),
             start: debut,
-            end: fin,
+            end: addOneDay(fin), // Ajout d'un jour pour couvrir toute la période jusqu'au soir
             backgroundColor: couleur,
             borderColor: couleur,
             allDay: true

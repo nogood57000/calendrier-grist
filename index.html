@@ -12,19 +12,74 @@
       padding: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       height: 100%;
-      overflow: hidden;
+      display: flex;
+      flex-direction: column;
       background: #ffffff;
+      overflow: hidden;
     }
-    #calendar {
-      height: 100vh;
+
+    /* Barre de légende en haut */
+    #barre-legende {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+      padding: 8px 14px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 12px;
+      font-weight: 600;
+      color: #334155;
+    }
+    .item-legende {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pastille {
+      width: 13px;
+      height: 13px;
+      border-radius: 3px;
+      display: inline-block;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+    }
+
+    #calendar-container {
+      flex: 1;
+      min-height: 0;
       padding: 8px;
       box-sizing: border-box;
     }
+    #calendar {
+      height: 100%;
+    }
+
+    /* Style des événements du calendrier */
     .fc-event {
       cursor: pointer;
-      font-weight: 500;
+      border: none !important;
+      border-radius: 4px !important;
+      padding: 1px 4px !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
     }
-    /* Modale de saisie */
+    .event-contenu {
+      font-size: 11px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .event-badge-statut {
+      font-weight: 700;
+      text-transform: uppercase;
+      margin-right: 4px;
+      padding: 1px 4px;
+      border-radius: 3px;
+      background: rgba(0, 0, 0, 0.22);
+      font-size: 10px;
+    }
+
+    /* Fenêtre modale de saisie */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -89,9 +144,23 @@
   </style>
 </head>
 <body>
-  <div id="calendar"></div>
 
-  <!-- Formulaire modal -->
+  <!-- Légende visuelle -->
+  <div id="barre-legende">
+    <span style="font-size: 11px; text-transform: uppercase; color: #64748b; margin-right: 4px;">Légende :</span>
+    <span class="item-legende"><span class="pastille" style="background:#fbc02d;"></span> Congés</span>
+    <span class="item-legende"><span class="pastille" style="background:#1976d2;"></span> Télétravail</span>
+    <span class="item-legende"><span class="pastille" style="background:#f57c00;"></span> Déplacement</span>
+    <span class="item-legende"><span class="pastille" style="background:#388e3c;"></span> Présent</span>
+    <span class="item-legende"><span class="pastille" style="background:#7b1fa2;"></span> Astreinte</span>
+    <span class="item-legende"><span class="pastille" style="background:#d32f2f;"></span> Conflit ⚠</span>
+  </div>
+
+  <div id="calendar-container">
+    <div id="calendar"></div>
+  </div>
+
+  <!-- Formulaire modal de saisie -->
   <div id="fenetre-voeu">
     <div class="conteneur-formulaire">
       <h3>Nouveau vœu de présence</h3>
@@ -133,21 +202,20 @@
 
   <script>
     let calendar;
-    // Map : ID numérique -> Libellé Identité
-    const annuaireAgents = new Map();
+    const annuaireAgents = new Map(); // id numérique -> nom complet
     let recordsEnCache = [];
 
     const COULEURS = {
-      'CONFLIT': '#d32f2f',        // Rouge vif
-      'CONGES': '#fbc02d',         // Jaune
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TELETRAVAIL': '#1976d2',
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00', // Orange
+      'EN DEPLACEMENT': '#f57c00',
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',        // Vert
+      'PRESENT': '#388e3c',
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'       // Violet
+      'ASTREINTE': '#7b1fa2'
     };
 
     function addOneDay(str) {
@@ -196,7 +264,6 @@
       }
     }
 
-    // Récupère la liste intégrale des agents depuis toutes les tables
     async function chargerEquipeGlobale() {
       try {
         const tables = await grist.docApi.listTables();
@@ -246,9 +313,7 @@
       }
     }
 
-    // Identifie l'agent de façon robuste (renvoie { id: number|null, nom: string })
     function identifierAgent(r) {
-      // 1. Chercher un ID numérique
       let id = null;
       if (typeof r.Agent === 'number') id = r.Agent;
       else if (typeof r.qui === 'number') id = r.qui;
@@ -256,17 +321,13 @@
       else if (r.qui && typeof r.qui === 'object' && r.qui.id) id = r.qui.id;
       else {
         const valStr = String(r.Agent || r.qui || '').trim();
-        if (/^\d+$/.test(valStr)) {
-          id = parseInt(valStr, 10);
-        }
+        if (/^\d+$/.test(valStr)) id = parseInt(valStr, 10);
       }
 
-      // Si l'ID est connu dans l'annuaire
       if (id !== null && annuaireAgents.has(id)) {
         return { id: id, nom: annuaireAgents.get(id) };
       }
 
-      // 2. Si un libellé texte propre est déjà présent dans une colonne
       const texte = r.Agent || r.qui;
       if (typeof texte === 'string' && texte.trim() && !/^\d+$/.test(texte.trim()) && !texte.startsWith('#')) {
         const propre = nettoyerTexte(texte);
@@ -274,10 +335,7 @@
         return { id: id, nom: propre };
       }
 
-      // 3. Fallback
-      if (id !== null) {
-        return { id: id, nom: 'Agent #' + id };
-      }
+      if (id !== null) return { id: id, nom: 'Agent #' + id };
       return { id: null, nom: nettoyerTexte(texte) || 'Agent' };
     }
 
@@ -292,20 +350,15 @@
         const infoAgent = identifierAgent(r);
         const nomComplet = infoAgent.nom;
 
-        // Statut saisi
         const statutBrut = String(r.STATUT || r.Statut || r.Statut_affiche || '').trim();
         const sNorm = normaliser(statutBrut);
         const statutConflitCol = normaliser(r.Statut_conflit);
 
-        // Détection de conflit :
-        // Même personne + même date
-        // SAUF si l'un est ASTREINTE et l'autre est TELETRAVAIL / EN DEPLACEMENT / PRESENT
+        // Détection de conflit
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
 
           const autreInfo = identifierAgent(autre);
-
-          // Vérification stricte de l'identité : soit même ID, soit même Nom
           const memePersonne = (infoAgent.id && autreInfo.id) 
             ? (infoAgent.id === autreInfo.id) 
             : (nomComplet === autreInfo.nom && nomComplet !== 'Agent');
@@ -322,7 +375,6 @@
           const unEstAstreinte = sNorm.includes('ASTREINTE');
           const autreEstAstreinte = autreSNorm.includes('ASTREINTE');
 
-          // Règle d'exemption d'astreinte
           if (unEstAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
           if (autreEstAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
 
@@ -333,7 +385,7 @@
 
         let couleur = '#3788d8';
         if (estEnConflit) {
-          couleur = COULEURS['CONFLIT']; // Rouge
+          couleur = COULEURS['CONFLIT'];
         } else {
           for (const [cle, val] of Object.entries(COULEURS)) {
             if (sNorm.includes(cle)) {
@@ -343,20 +395,23 @@
           }
         }
 
-        // TITRE : On conserve toujours le statut saisi, et on ajoute [CONFLIT] s'il y a un souci !
-        let titreAffichage = nomComplet + (statutBrut ? ' — ' + statutBrut : '');
-        if (estEnConflit) {
-          titreAffichage += ' [CONFLIT]';
-        }
+        const tagStatut = estEnConflit ? 'CONFLIT ⚠' : (statutBrut || 'PRESENCE');
 
         return {
           id: r.id,
-          title: titreAffichage,
+          // Titre brut de secours
+          title: `[${tagStatut}] ${nomComplet}`,
           start: debut,
           end: addOneDay(fin),
           backgroundColor: couleur,
           borderColor: couleur,
-          allDay: true
+          allDay: true,
+          extendedProps: {
+            statutBadge: tagStatut,
+            nomAgent: nomComplet,
+            estConflit: estEnConflit,
+            periodeTexte: `${debut} au ${fin}`
+          }
         };
       });
 
@@ -389,7 +444,6 @@
           await grist.selectedTable.create({ fields: { ...champs, qui: agentId } });
           fermer();
         } catch (e2) {
-          console.error("Échec création :", e2);
           alert("Erreur lors de l'enregistrement.");
         }
       }
@@ -404,7 +458,7 @@
         firstDay: 1,
         selectable: true,
         selectMirror: false,
-        allDayText: 'Programme journée',
+        allDayText: 'Journée',
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -414,6 +468,19 @@
           today: "Aujourd'hui",
           month: 'Mois',
           week: 'Semaine'
+        },
+
+        // Personnalisation du rendu des bandeaux pour afficher le badge au début
+        eventContent: function(arg) {
+          const badge = arg.event.extendedProps.statutBadge || '';
+          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
+          
+          const conteneur = document.createElement('div');
+          conteneur.className = 'event-contenu';
+          conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}`;
+
+          conteneur.innerHTML = `<span class="event-badge-statut">${badge}</span><span>${nom}</span>`;
+          return { domNodes: [conteneur] };
         },
 
         select: async function(info) {
@@ -438,14 +505,12 @@
       calendar.render();
       grist.ready({ requiredAccess: 'full' });
 
-      // Charger l'annuaire au lancement
       chargerEquipeGlobale();
 
       grist.onRecords(async function(records) {
         if (!records) return;
         recordsEnCache = records;
 
-        // Si l'annuaire n'a pas encore résolu tous les agents
         const aDesNumerosNonResolus = records.some(r => {
           const info = identifierAgent(r);
           return info.nom.startsWith('Agent #') || info.nom === 'Agent';

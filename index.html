@@ -15,12 +15,13 @@
     }
     #calendar {
       height: 100vh;
-      padding: 10px;
+      padding: 8px;
       box-sizing: border-box;
     }
     .fc-event {
       cursor: pointer;
       font-weight: 500;
+      margin-bottom: 2px !important;
     }
   </style>
 </head>
@@ -29,23 +30,20 @@
 
   <script>
     let calendar;
-    let tableMappings = {};
 
-    // Couleurs fixes pour chaque statut
     const COULEURS = {
-      'CONFLIT': '#d32f2f',        // Rouge vif
-      'CONGES': '#fbc02d',         // Jaune
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
       'CONGÉS': '#fbc02d',
-      'TELETRAVAIL': '#1976d2',    // Bleu
+      'TELETRAVAIL': '#1976d2',
       'TÉLÉTRAVAIL': '#1976d2',
-      'EN DEPLACEMENT': '#f57c00', // Orange
+      'EN DEPLACEMENT': '#f57c00',
       'DÉPLACEMENT': '#f57c00',
-      'PRESENT': '#388e3c',        // Vert
+      'PRESENT': '#388e3c',
       'PRÉSENT': '#388e3c',
-      'ASTREINTE': '#7b1fa2'       // Violet
+      'ASTREINTE': '#7b1fa2'
     };
 
-    // Ajustement de la date de fin (FullCalendar exclut le dernier jour en allDay)
     function addOneDay(dateStr) {
       if (!dateStr) return dateStr;
       const d = new Date(dateStr);
@@ -67,13 +65,18 @@
         initialView: 'dayGridMonth',
         locale: 'fr',
         firstDay: 1,
-        editable: false,
-        selectable: true, // Permet de cliquer ou glisser pour créer un vœu
+        selectable: true,
         selectMirror: true,
+        allDayText: 'Programme journée', // Remplacement du texte
+        views: {
+          dayGridWeek: {
+            allDayText: 'Programme journée'
+          }
+        },
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,timeGridWeek'
+          right: 'dayGridMonth,dayGridWeek' // Utilise dayGridWeek au lieu de timeGridWeek
         },
         buttonText: {
           today: "Aujourd'hui",
@@ -81,10 +84,8 @@
           week: 'Semaine'
         },
 
-        // Action au clic ou glisser sur une case vide pour créer une ligne
         select: async function(info) {
           const debut = info.startStr;
-          // FullCalendar renvoie le jour suivant comme borne de fin : on retire 1 jour pour Grist
           const fin = removeOneDay(info.endStr);
 
           try {
@@ -92,7 +93,7 @@
               fields: {
                 Date_debut: debut,
                 Date_fin: fin,
-                STATUT: 'CONGES' // Statut par défaut à la création
+                STATUT: 'CONGES'
               }
             });
           } catch (err) {
@@ -101,7 +102,6 @@
           calendar.unselect();
         },
 
-        // Clic sur un événement existant : sélectionne la ligne dans la table Grist
         eventClick: function(info) {
           if (info.event.id) {
             grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
@@ -113,17 +113,13 @@
 
       calendar.render();
 
-      // Autorisation en lecture et écriture pour permettre l'ajout de vœux
       grist.ready({ requiredAccess: 'full' });
 
-      // Réception des enregistrements Grist
       grist.onRecords(function(records) {
         const events = records.filter(r => (r.Date_debut || r.date_debut)).map(r => {
           const debut = r.Date_debut || r.date_debut;
           const fin = r.Date_fin || r.date_fin || debut;
           const agent = r.Agent || r.qui || 'Agent';
-          
-          // Recherche du statut pour la couleur
           const statutBrut = String(r.Statut || r.Statut_affiche || r.STATUT || '').trim();
           const statutUpper = statutBrut.toUpperCase();
           
@@ -139,7 +135,7 @@
             id: r.id,
             title: agent + (statutBrut ? ' — ' + statutBrut : ''),
             start: debut,
-            end: addOneDay(fin), // Ajout d'un jour pour couvrir toute la période jusqu'au soir
+            end: addOneDay(fin),
             backgroundColor: couleur,
             borderColor: couleur,
             allDay: true

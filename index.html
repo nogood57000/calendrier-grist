@@ -21,9 +21,7 @@
     .fc-event {
       cursor: pointer;
       font-weight: 500;
-      margin-bottom: 2px !important;
     }
-    /* Boîte de dialogue */
     #modal-overlay {
       display: none;
       position: fixed;
@@ -90,7 +88,6 @@
 <body>
   <div id="calendar"></div>
 
-  <!-- Formulaire modal -->
   <div id="modal-overlay">
     <div id="modal-box">
       <h3>Nouveau vœu de présence</h3>
@@ -194,7 +191,6 @@
         fermerModale();
       } catch (err) {
         console.error("Erreur lors de la création :", err);
-        alert("Impossible d'enregistrer l'événement.");
       }
     });
 
@@ -207,12 +203,6 @@
         firstDay: 1,
         selectable: true,
         selectMirror: false,
-        allDayText: 'Programme journée',
-        views: {
-          dayGridWeek: {
-            allDayText: 'Programme journée'
-          }
-        },
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -223,23 +213,7 @@
           month: 'Mois',
           week: 'Semaine'
         },
-
-        // Déclenchement de la modale au clic/glisser
         select: function(info) {
           inputDebut.value = info.startStr;
           inputFin.value = removeOneDay(info.endStr);
           modal.style.display = 'flex';
-        },
-
-        eventClick: function(info) {
-          if (info.event.id) {
-            grist.setCursorPos({ rowId: parseInt(info.event.id, 10) });
-          }
-        },
-
-        events: []
-      });
-
-      calendar.render();
-
-      grist.ready({ requiredAccess

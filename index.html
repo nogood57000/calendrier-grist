@@ -134,7 +134,7 @@
       border-radius: 4px;
       box-sizing: border-box;
       font-size: 13px;
-      background: #ffffff;
+      background: #fff;
     }
     .barre-boutons {
       display: flex;
@@ -191,7 +191,7 @@
       <div class="champ">
         <label for="form-agent">Membre de l'équipe</label>
         <select id="form-agent">
-          <option value="">Chargement des membres...</option>
+          <option value="">-- Choisir un membre --</option>
         </select>
       </div>
 
@@ -228,10 +228,11 @@
 
   <script>
     let calendar;
-    // Map : ID numérique (dans Equipe) -> Nom complet
-    const annuaireEquipe = new Map();
-    let cacheRecords = [];
+    const annuaireAgents = new Map();
     let ligneSelectionneeId = null;
+
+    const CLE_STOCKAGE_EVENTS = "grist_pjj_presences_data";
+    const CLE_STOCKAGE_AGENTS = "grist_pjj_agents_data";
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -312,19 +313,18 @@
       if (confirm("Supprimer ce vœu de présence ?")) {
         try {
           await grist.selectedTable.destroy([ligneSelectionneeId]);
-        } catch (e) {
+        } catch(e) {
           await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
         }
         fermer();
-        await rechargerTout();
       }
     });
 
-    function remplirSelectAgents() {
-      const choixActuel = selectAgent.value;
+    function majSelectAgents() {
+      const choix = selectAgent.value;
       selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
 
-      const liste = Array.from(annuaireEquipe.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
       for (const [id, label] of liste) {
         const opt = document.createElement('option');
         opt.value = String(id);
@@ -332,98 +332,103 @@
         selectAgent.appendChild(opt);
       }
 
-      if (choixActuel && annuaireEquipe.has(parseInt(choixActuel, 10))) {
-        selectAgent.value = choixActuel;
+      if (choix && annuaireAgents.has(choix)) {
+        selectAgent.value = choix;
       }
     }
 
-    // Chargement de la table Equipe_en_DTPJJ_de_Moselle (SANS S !)
-    async function chargerAnnuaire() {
+    // Charger les agents depuis le stockage local dès la première milliseconde
+    function chargerAgentsDepuisCache() {
+      try {
+        const brut = localStorage.getItem(CLE_STOCKAGE_AGENTS);
+        if (brut) {
+          const tab = JSON.parse(brut);
+          for (const item of tab) {
+            annuaireAgents.set(String(item.id), item.nom);
+          }
+          majSelectAgents();
+        }
+      } catch(e) {}
+    }
+
+    function sauvegarderAgentsDansCache() {
+      try {
+        const tab = Array.from(annuaireAgents.entries()).map(([id, nom]) => ({ id, nom }));
+        localStorage.setItem(CLE_STOCKAGE_AGENTS, JSON.stringify(tab));
+      } catch(e) {}
+    }
+
+    async function tenterChargerTableEquipe() {
       try {
         const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
         if (t && t.id) {
-          annuaireEquipe.clear();
           for (let i = 0; i < t.id.length; i++) {
             const rowId = t.id[i];
             const nom = t.Nom ? (t.Nom[i] || '') : '';
             const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
             const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
             const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
-            annuaireEquipe.set(rowId, lib);
+            annuaireAgents.set(String(rowId), lib);
           }
-          remplirSelectAgents();
+          majSelectAgents();
+          sauvegarderAgentsDansCache();
         }
-      } catch (err) {
-        console.warn("Table Equipe non accessible via API :", err);
-      }
+      } catch(e) {}
     }
 
-    async function rechargerTout() {
-      await chargerAnnuaire();
+    function afficherDonnees(records) {
+      if (!records || records.length === 0) return;
 
-      // 1. Lire la table Presences
+      // Sauvegarde immédiate dans le stockage persistant du navigateur
       try {
-        const pres = await grist.docApi.fetchTable('Presences');
-        if (pres && pres.id && pres.id.length > 0) {
-          const rows = [];
-          for (let i = 0; i < pres.id.length; i++) {
-            rows.push({
-              id: pres.id[i],
-              qui: pres.qui ? pres.qui[i] : null,
-              Date_debut: pres.Date_debut ? pres.Date_debut[i] : null,
-              Date_fin: pres.Date_fin ? pres.Date_fin[i] : null,
-              STATUT: pres.STATUT ? pres.STATUT[i] : '',
-              Statut_conflit: pres.Statut_conflit ? pres.Statut_conflit[i] : (pres.Statut2 ? pres.Statut2[i] : 'OK')
-            });
-          }
-          cacheRecords = rows;
-          afficherSurCalendrier(rows);
-          return;
-        }
-      } catch (e) {}
+        localStorage.setItem(CLE_STOCKAGE_EVENTS, JSON.stringify(records));
+      } catch(e) {}
 
-      // 2. Repli selectedTable
-      try {
-        const records = await grist.docApi.fetchSelectedTable();
-        if (Array.isArray(records) && records.length > 0) {
-          cacheRecords = records;
-          afficherSurCalendrier(records);
-        }
-      } catch (e2) {}
-    }
-
-    function afficherSurCalendrier(records) {
-      if (!records) return;
-
-      // Récupérer les agents depuis les cellules si l'API n'a pas pu lire la table Equipe
+      // Extraire les noms des agents
       records.forEach(r => {
-        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const txt = getVal(r, ['Agent', 'Identite', 'nom']);
-        if (!isNaN(qId) && typeof txt === 'string' && !/^\d+$/.test(txt.trim()) && !txt.startsWith('#')) {
-          if (!annuaireEquipe.has(qId)) annuaireEquipe.set(qId, txt.trim());
+        const q = getVal(r, ['qui', 'Agent', 'agent']);
+        const txt = getVal(r, ['Agent', 'Identite', 'nom', 'qui']);
+
+        if (typeof q === 'number') {
+          const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim()) && !txt.startsWith('#')) ? txt.trim() : `Agent #${q}`;
+          annuaireAgents.set(String(q), nom);
+        } else if (typeof q === 'string' && q.trim() && !/^\d+$/.test(q.trim()) && !q.startsWith('#')) {
+          annuaireAgents.set(q.trim(), q.trim());
         }
       });
-      remplirSelectAgents();
+      majSelectAgents();
+      sauvegarderAgentsDansCache();
 
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
       const valides = records.map(r => {
         const debut = parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut', 'DateDebut']));
         const fin = parseDateStr(getVal(r, ['Date_fin', 'Date fin', 'date_fin', 'DateFin'])) || debut;
-        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const txt = getVal(r, ['Agent', 'Identite']);
-        const nomAffiche = annuaireEquipe.get(qId) || (typeof txt === 'string' && !/^\d+$/.test(txt) ? txt : `Agent #${qId}`);
+        const q = getVal(r, ['qui', 'Agent', 'agent']);
+        const txt = getVal(r, ['Agent', 'Identite', 'qui']);
+
+        let agentCle = '';
+        let nomAffiche = 'Agent';
+
+        if (typeof q === 'number') {
+          agentCle = String(q);
+          nomAffiche = annuaireAgents.get(agentCle) || (typeof txt === 'string' && !txt.startsWith('#') ? txt : `Agent #${q}`);
+        } else if (typeof q === 'string' && q.trim()) {
+          agentCle = q.trim();
+          nomAffiche = annuaireAgents.get(agentCle) || agentCle;
+        }
+
         const statut = String(getVal(r, ['STATUT', 'Statut', 'statut']) || '').trim();
-        const conf = String(getVal(r, ['Statut_conflit', 'Statut conflit', 'statut_conflit', 'Statut2']) || 'OK').trim();
+        const statutConf = String(getVal(r, ['Statut_conflit', 'Statut conflit', 'statut_conflit', 'Statut2']) || 'OK').trim();
 
         return {
           id: r.id,
-          agentId: isNaN(qId) ? null : qId,
-          nomComplet: nomAffiche,
+          agentCle: agentCle,
+          nomAffiche: nomAffiche,
           debut: debut,
           fin: fin,
           statut: statut,
-          statutConflit: conf
+          statutConflit: statutConf
         };
       }).filter(r => Boolean(r.debut));
 
@@ -433,7 +438,7 @@
 
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
-          if (!r.agentId || r.agentId !== autre.agentId) return false;
+          if (!r.agentCle || r.agentCle !== autre.agentCle) return false;
 
           const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
           if (!chevauche) return false;
@@ -466,7 +471,7 @@
 
         return {
           id: String(r.id),
-          title: `[${badgeTexte}] ${r.nomComplet}`,
+          title: `[${badgeTexte}] ${r.nomAffiche}`,
           start: r.debut,
           end: addOneDay(r.fin),
           backgroundColor: couleur,
@@ -474,8 +479,8 @@
           allDay: true,
           extendedProps: {
             rowId: r.id,
-            agentId: r.agentId,
-            nomAgent: r.nomComplet,
+            agentCle: r.agentCle,
+            nomAgent: r.nomAffiche,
             statutInitial: r.statut,
             statutBadge: badgeTexte,
             debutReel: r.debut,
@@ -490,56 +495,71 @@
       calendar.addEventSource(events);
     }
 
-    // Enregistrement garanti
+    // Restaurer immédiatement les données sauvées lors de la destruction de l'iframe
+    function restaurerDepuisCache() {
+      try {
+        const stocke = localStorage.getItem(CLE_STOCKAGE_EVENTS);
+        if (stocke) {
+          const data = JSON.parse(stocke);
+          if (Array.isArray(data) && data.length > 0) {
+            afficherDonnees(data);
+          }
+        }
+      } catch(e) {}
+    }
+
+    // Enregistrement
     document.getElementById('btn-valider').addEventListener('click', async function() {
-      const agentId = parseInt(selectAgent.value, 10);
+      const agentVal = selectAgent.value;
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
 
-      if (isNaN(agentId) || !debut || !fin) {
-        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
+      if (!agentVal || !debut || !fin) {
+        alert("Veuillez sélectionner un membre et des dates valides.");
         return;
       }
 
-      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
-      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+      const agentNum = parseInt(agentVal, 10);
+      const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
-      const fieldsTs = { qui: agentId, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
-      const fieldsIso = { qui: agentId, STATUT: statut, Date_debut: debut, Date_fin: fin };
+      const fieldsIso = { qui: refAgent, STATUT: statut, Date_debut: debut, Date_fin: fin };
 
       try {
         if (ligneSelectionneeId) {
-          try {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
-          } catch(e) {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsTs });
-          }
+          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
         } else {
-          try {
-            await grist.selectedTable.create({ fields: fieldsIso });
-          } catch(e) {
-            await grist.selectedTable.create({ fields: fieldsTs });
-          }
+          await grist.selectedTable.create({ fields: fieldsIso });
         }
         fermer();
-        await rechargerTout();
       } catch (err) {
+        const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+        const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+        const fieldsTs = { qui: refAgent, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
+
         try {
           if (ligneSelectionneeId) {
-            await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fieldsTs]]);
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsTs });
           } else {
-            await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fieldsTs]]);
+            await grist.selectedTable.create({ fields: fieldsTs });
           }
           fermer();
-          await rechargerTout();
         } catch(e2) {
-          alert("Erreur lors de l'enregistrement dans Grist.");
+          try {
+            if (ligneSelectionneeId) {
+              await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fieldsTs]]);
+            } else {
+              await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fieldsTs]]);
+            }
+            fermer();
+          } catch(e3) {
+            alert("Erreur lors de l'enregistrement.");
+          }
         }
       }
     });
 
-    document.addEventListener('DOMContentLoaded', async function() {
+    document.addEventListener('DOMContentLoaded', function() {
       const calendarEl = document.getElementById('calendar');
 
       calendar = new FullCalendar.Calendar(calendarEl, {
@@ -585,7 +605,7 @@
           finCalculee.setDate(finCalculee.getDate() - 1);
           inputFin.value = finCalculee.toISOString().split('T')[0];
 
-          remplirSelectAgents();
+          majSelectAgents();
           modalEl.style.display = 'flex';
         },
 
@@ -599,9 +619,11 @@
           inputDebut.value = props.debutReel;
           inputFin.value = props.finReelle;
 
-          remplirSelectAgents();
+          majSelectAgents();
 
-          if (props.agentId) selectAgent.value = String(props.agentId);
+          if (props.agentCle && annuaireAgents.has(props.agentCle)) {
+            selectAgent.value = props.agentCle;
+          }
 
           const sInit = normaliser(props.statutInitial);
           for (let opt of selectStatut.options) {
@@ -619,24 +641,22 @@
 
       calendar.render();
 
-      // Initialisation Grist universelle
+      // 1. Restaurer instantanément les événements et les agents dès l'ouverture
+      chargerAgentsDepuisCache();
+      restaurerDepuisCache();
+
+      // 2. Démarrer la liaison Grist
       grist.ready();
+      tenterChargerTableEquipe();
 
-      // Chargement direct des données
-      await rechargerTout();
-
-      // Rafraîchissement automatique
+      // 3. Réception des données réelles depuis Grist
       grist.onRecords(function(records) {
         if (records && records.length > 0) {
-          afficherSurCalendrier(records);
+          afficherDonnees(records);
         } else {
-          rechargerTout();
+          // Si Grist envoie une liste vide au rechargement de page, NE RIEN EFFACER et garder le cache
+          restaurerDepuisCache();
         }
-      });
-
-      window.addEventListener('focus', rechargerTout);
-      document.addEventListener('visibilitychange', function() {
-        if (!document.hidden) rechargerTout();
       });
     });
   </script>

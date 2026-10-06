@@ -147,7 +147,7 @@
       word-break: break-word;
     }
 
-    /* Thème contrasté */
+    /* Contraste automatique */
     .theme-sombre .event-ligne-statut {
       background: rgba(0, 0, 0, 0.18);
       color: #0f172a;
@@ -302,7 +302,7 @@
 
   <script>
     let calendar = null;
-    const annuaireAgents = new Map(); // id (numérique) -> Nom d'affichage
+    const annuaireAgents = new Map(); // id (numérique) -> Libellé formaté
     let cachePresences = [];
     let ligneSelectionneeId = null;
 
@@ -449,19 +449,7 @@
       const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
 
       for (const [id, label] of liste) {
-        // Filtrer les valeurs d'échappement
         if (!vu.has(label) && !label.startsWith('Agent #')) {
-          vu.add(label);
-          const opt = document.createElement('option');
-          opt.value = String(id);
-          opt.textContent = label;
-          selectAgent.appendChild(opt);
-        }
-      }
-
-      // Si certains agents n'ont que des identifiants sans nom
-      for (const [id, label] of liste) {
-        if (!vu.has(label)) {
           vu.add(label);
           const opt = document.createElement('option');
           opt.value = String(id);
@@ -475,27 +463,28 @@
       }
     }
 
-    // CHARGEMENT COMPLET ET INTELLIGENT DE L'ANNUAIRE
+    // CHARGEMENT DIRECT ET COMBINÉ DE L'ANNUAIRE
     async function chargerAnnuaire() {
       try {
         const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
         if (t && t.id) {
+          const colNom = t.Nom || t.nom || [];
+          const colPrenom = t.Prenom || t.prenom || [];
+          const colFonc = t.Fonction || t.fonction || [];
+          const colIdentite = t.Identite || t.identite || t['Identité'] || [];
+
           for (let i = 0; i < t.id.length; i++) {
             const rowId = t.id[i];
-            
-            // 1. Chercher si la colonne Identite existe déjà
             let lib = '';
-            if (t.Identite && t.Identite[i]) {
-              lib = String(t.Identite[i]).trim();
-            } else if (t['Identité'] && t['Identité'][i]) {
-              lib = String(t['Identité'][i]).trim();
+
+            if (colIdentite && colIdentite[i]) {
+              lib = String(colIdentite[i]).trim();
             }
 
-            // 2. Sinon, construire depuis Nom, Prenom, Fonction
             if (!lib) {
-              const nom = t.Nom ? (t.Nom[i] || '') : '';
-              const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
-              const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
+              const nom = colNom[i] || '';
+              const prenom = colPrenom[i] || '';
+              const fonc = colFonc[i] || '';
               lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim();
             }
 
@@ -505,9 +494,7 @@
           }
           majSelectAgents();
         }
-      } catch(e) {
-        console.warn("Table Equipe_en_DTPJJ_de_Moselle non chargée :", e);
-      }
+      } catch(e) {}
     }
 
     async function toutRecharger() {
@@ -528,7 +515,6 @@
               Agent: p.Agent ? p.Agent[i] : (p.Identite ? p.Identite[i] : null)
             });
           }
-          cachePresences = rows;
           afficherRecords(rows);
           return;
         }
@@ -537,7 +523,6 @@
       try {
         const sel = await grist.docApi.fetchSelectedTable();
         if (Array.isArray(sel) && sel.length > 0) {
-          cachePresences = sel;
           afficherRecords(sel);
         }
       } catch(e2) {}
@@ -546,10 +531,10 @@
     function afficherRecords(records) {
       if (!records || !calendar) return;
 
-      // 3. Découverte de secours : Si des noms sont présents dans la colonne Agent des présences
+      // Résolution automatique si la colonne Agent textuelle est disponible
       records.forEach(r => {
         const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const txt = trouverValeur(r, ['Agent', 'Identite', 'nom']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
 
         if (!isNaN(qId) && typeof txt === 'string' && txt.trim() && !txt.startsWith('Agent #') && !txt.includes('NaN')) {
           annuaireAgents.set(qId, txt.trim());
@@ -570,10 +555,10 @@
 
         if (!isNaN(qId) && annuaireAgents.has(qId)) {
           nomAffiche = annuaireAgents.get(qId);
-        } else if (typeof txt === 'string' && txt.trim() && !txt.includes('NaN')) {
+        } else if (typeof txt === 'string' && txt.trim() && !txt.startsWith('Agent #') && !txt.includes('NaN')) {
           nomAffiche = txt.trim();
         } else if (!isNaN(qId)) {
-          nomAffiche = `Agent #${qId}`;
+          nomAffiche = annuaireAgents.get(qId) || `Agent #${qId}`;
         } else {
           nomAffiche = 'Collaborateur';
         }
@@ -671,6 +656,12 @@
 
       const agentNum = parseInt(agentVal, 10);
       const refAgent = isNaN(agentNum) ? agentVal : agentNum;
+
+      // Sauvegarde immédiate du nom sélectionné pour affichage instantané
+      const optionChoisie = selectAgent.options[selectAgent.selectedIndex];
+      if (optionChoisie && optionChoisie.textContent) {
+        annuaireAgents.set(refAgent, optionChoisie.textContent.trim());
+      }
 
       const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
       const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);

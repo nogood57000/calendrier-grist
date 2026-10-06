@@ -42,6 +42,15 @@
       display: inline-block;
       box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }
+    .pastille-vacances {
+      background: repeating-linear-gradient(
+        45deg,
+        #e2e8f0,
+        #e2e8f0 3px,
+        #cbd5e1 3px,
+        #cbd5e1 6px
+      );
+    }
 
     #calendar-container {
       flex: 1;
@@ -52,6 +61,13 @@
     }
     #calendar {
       height: 100%;
+    }
+
+    /* Style des vacances en arrière-plan */
+    .fc-bg-event.zone-b-vacances {
+      background: rgba(186, 230, 253, 0.45) !important; /* Bleu très doux */
+      opacity: 1 !important;
+      border: none !important;
     }
 
     .fc-event, 
@@ -179,6 +195,7 @@
     <span class="item-legende"><span class="pastille" style="background:#388e3c;"></span> Présent</span>
     <span class="item-legende"><span class="pastille" style="background:#7b1fa2;"></span> Astreinte</span>
     <span class="item-legende"><span class="pastille" style="background:#d32f2f;"></span> Conflit ⚠</span>
+    <span class="item-legende"><span class="pastille pastille-vacances" style="background:#bae6fd;"></span> Vacances Zone B</span>
   </div>
 
   <div id="calendar-container">
@@ -229,10 +246,55 @@
 
   <script>
     let calendar = null;
-    // Map : ID entier (dans Equipe_en_DTPJJ_de_Moselle) -> Identité
     const annuaireAgents = new Map();
     let cachePresences = [];
     let ligneSelectionneeId = null;
+
+    // Calendrier officiel Zone B (2026 - 2027)
+    const VACANCES_ZONE_B = [
+      {
+        title: "Vacances de la Toussaint (Zone B)",
+        start: "2026-10-17",
+        end: "2026-11-02",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      },
+      {
+        title: "Vacances de Noël (Zone B)",
+        start: "2026-12-19",
+        end: "2027-01-04",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      },
+      {
+        title: "Vacances d'hiver (Zone B)",
+        start: "2027-02-20",
+        end: "2027-03-08",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      },
+      {
+        title: "Vacances de printemps (Zone B)",
+        start: "2027-04-17",
+        end: "2027-05-03",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      },
+      {
+        title: "Pont de l'Ascension (Zone B)",
+        start: "2027-05-06",
+        end: "2027-05-10",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      },
+      {
+        title: "Grandes vacances d'été (Zone B)",
+        start: "2027-07-03",
+        end: "2027-09-02",
+        display: "background",
+        classNames: ["zone-b-vacances"]
+      }
+    ];
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -276,326 +338,4 @@
     const selectStatut = document.getElementById('form-statut');
     const inputDebut = document.getElementById('form-debut');
     const inputFin = document.getElementById('form-fin');
-    const btnSupprimer = document.getElementById('btn-supprimer');
-
-    function fermer() {
-      modalEl.style.display = 'none';
-      ligneSelectionneeId = null;
-      btnSupprimer.style.display = 'none';
-      if (calendar) calendar.unselect();
-    }
-
-    document.getElementById('btn-annuler').addEventListener('click', fermer);
-
-    btnSupprimer.addEventListener('click', async function() {
-      if (!ligneSelectionneeId) return;
-      if (confirm("Supprimer ce vœu de présence ?")) {
-        try {
-          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
-          fermer();
-          await toutCharger();
-        } catch(e) {
-          alert("Erreur lors de la suppression.");
-        }
-      }
-    });
-
-    function majSelectAgents() {
-      const choix = selectAgent.value;
-      selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
-
-      // Dédoublonnage strict par identité
-      const vu = new Set();
-      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
-
-      for (const [id, label] of liste) {
-        if (!vu.has(label)) {
-          vu.add(label);
-          const opt = document.createElement('option');
-          opt.value = String(id);
-          opt.textContent = label;
-          selectAgent.appendChild(opt);
-        }
-      }
-
-      if (choix && annuaireAgents.has(parseInt(choix, 10))) {
-        selectAgent.value = choix;
-      }
-    }
-
-    // 1. Chargement de l'annuaire d'équipe
-    async function chargerAnnuaire() {
-      try {
-        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
-        if (t && t.id) {
-          annuaireAgents.clear();
-          for (let i = 0; i < t.id.length; i++) {
-            const rowId = t.id[i];
-            const nom = t.Nom ? (t.Nom[i] || '') : '';
-            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
-            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
-            const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
-            annuaireAgents.set(rowId, lib);
-          }
-          majSelectAgents();
-        }
-      } catch(e) {
-        console.warn("Erreur chargement annuaire:", e);
-      }
-    }
-
-    // 2. Chargement direct de la table Presences
-    async function toutCharger() {
-      await chargerAnnuaire();
-
-      try {
-        const p = await grist.docApi.fetchTable('Presences');
-        if (p && p.id) {
-          const rows = [];
-          for (let i = 0; i < p.id.length; i++) {
-            rows.push({
-              id: p.id[i],
-              qui: p.qui ? p.qui[i] : null,
-              Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
-              Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
-              STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
-              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK')
-            });
-          }
-          cachePresences = rows;
-          afficherPresences(rows);
-          return;
-        }
-      } catch(e) {
-        console.warn("fetchTable Presences:", e);
-      }
-
-      // Repli
-      try {
-        const sel = await grist.docApi.fetchSelectedTable();
-        if (Array.isArray(sel) && sel.length > 0) {
-          cachePresences = sel;
-          afficherPresences(sel);
-        }
-      } catch(e2) {}
-    }
-
-    function afficherPresences(records) {
-      if (!records || !calendar) return;
-
-      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
-
-      const valides = records.map(r => {
-        const debut = parseDate(r.Date_debut || r['Date début']);
-        const fin = parseDate(r.Date_fin || r['Date fin']) || debut;
-        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
-        const statut = String(r.STATUT || r.Statut || '').trim();
-        const conf = String(r.Statut_conflit || r.Statut2 || 'OK').trim();
-
-        return {
-          id: r.id,
-          agentId: isNaN(qId) ? null : qId,
-          nomAffiche: annuaireAgents.get(qId) || (r.Agent || `Agent #${qId}`),
-          debut: debut,
-          fin: fin,
-          statut: statut,
-          statutConflit: conf
-        };
-      }).filter(r => Boolean(r.debut));
-
-      const events = valides.map((r, index, array) => {
-        const sNorm = r.statut.toUpperCase();
-        const confNorm = r.statutConflit.toUpperCase();
-
-        const doublonInterdit = array.some((autre, autreIdx) => {
-          if (index === autreIdx) return false;
-          if (!r.agentId || r.agentId !== autre.agentId) return false;
-
-          const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
-          if (!chevauche) return false;
-
-          const autreSNorm = autre.statut.toUpperCase();
-          const unAstreinte = sNorm.includes('ASTREINTE');
-          const autreAstreinte = autreSNorm.includes('ASTREINTE');
-
-          if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
-          if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
-
-          return true;
-        });
-
-        const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
-
-        let couleur = '#3788d8';
-        if (estEnConflit) {
-          couleur = COULEURS['CONFLIT'];
-        } else {
-          for (const [cle, val] of Object.entries(COULEURS)) {
-            if (sNorm.includes(cle)) {
-              couleur = val;
-              break;
-            }
-          }
-        }
-
-        const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : (r.statut || 'PRESENCE');
-
-        return {
-          id: String(r.id),
-          title: `[${badgeTexte}] ${r.nomAffiche}`,
-          start: r.debut,
-          end: addDays(r.fin, 1),
-          backgroundColor: couleur,
-          borderColor: couleur,
-          allDay: true,
-          extendedProps: {
-            rowId: r.id,
-            agentId: r.agentId,
-            nomAgent: r.nomAffiche,
-            statutInitial: r.statut,
-            statutBadge: badgeTexte,
-            debutReel: r.debut,
-            finReelle: r.fin,
-            periodeTexte: `${r.debut} au ${r.fin}`
-          }
-        };
-      });
-
-      calendar.removeAllEvents();
-      calendar.addEventSource(events);
-    }
-
-    // 3. Enregistrement garanti avec ID numérique dans la colonne "qui"
-    document.getElementById('btn-valider').addEventListener('click', async function() {
-      const agentId = parseInt(selectAgent.value, 10);
-      const statut = selectStatut.value;
-      const debut = inputDebut.value;
-      const fin = inputFin.value;
-
-      if (isNaN(agentId) || !debut || !fin) {
-        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
-        return;
-      }
-
-      // Conversion Unix secondes
-      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
-      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
-
-      const champsRecord = {
-        qui: agentId,
-        STATUT: statut,
-        Date_debut: tsDebut,
-        Date_fin: tsFin
-      };
-
-      try {
-        if (ligneSelectionneeId) {
-          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, champsRecord]]);
-        } else {
-          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, champsRecord]]);
-        }
-        fermer();
-        await toutCharger();
-      } catch (err) {
-        // Variante string ISO
-        try {
-          const champsIso = { qui: agentId, STATUT: statut, Date_debut: debut, Date_fin: fin };
-          if (ligneSelectionneeId) {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: champsIso });
-          } else {
-            await grist.selectedTable.create({ fields: champsIso });
-          }
-          fermer();
-          await toutCharger();
-        } catch(e2) {
-          alert("Erreur lors de l'enregistrement dans Grist.");
-        }
-      }
-    });
-
-    function initialiser() {
-      const calendarEl = document.getElementById('calendar');
-      calendar = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth',
-        locale: 'fr',
-        firstDay: 1,
-        selectable: true,
-        headerToolbar: {
-          left: 'prev,next today',
-          center: 'title',
-          right: 'dayGridMonth,dayGridWeek'
-        },
-        buttonText: {
-          today: "Aujourd'hui",
-          month: 'Mois',
-          week: 'Semaine'
-        },
-        eventContent: function(arg) {
-          const badge = arg.event.extendedProps.statutBadge || '';
-          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
-          const conteneur = document.createElement('div');
-          conteneur.className = 'event-card';
-          conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
-          conteneur.innerHTML = `
-            <div><span class="event-ligne-statut">${badge}</span></div>
-            <div class="event-ligne-nom">${nom}</div>
-          `;
-          return { domNodes: [conteneur] };
-        },
-        select: function(info) {
-          ligneSelectionneeId = null;
-          titreModal.textContent = "Nouveau vœu de présence";
-          btnSupprimer.style.display = "none";
-          inputDebut.value = info.startStr;
-          const f = new Date(info.endStr);
-          f.setDate(f.getDate() - 1);
-          inputFin.value = f.toISOString().split('T')[0];
-          majSelectAgents();
-          modalEl.style.display = 'flex';
-        },
-        eventClick: function(info) {
-          const props = info.event.extendedProps;
-          ligneSelectionneeId = props.rowId;
-          titreModal.textContent = "Modifier la présence";
-          btnSupprimer.style.display = "inline-block";
-          inputDebut.value = props.debutReel;
-          inputFin.value = props.finReelle;
-          majSelectAgents();
-          if (props.agentId) {
-            selectAgent.value = String(props.agentId);
-          }
-          const sInit = props.statutInitial.toUpperCase();
-          for (let opt of selectStatut.options) {
-            if (sInit.includes(opt.value)) {
-              selectStatut.value = opt.value;
-              break;
-            }
-          }
-          modalEl.style.display = 'flex';
-        },
-        events: []
-      });
-
-      calendar.render();
-
-      grist.ready({ requiredAccess: 'full' });
-
-      // Chargement direct complet
-      toutCharger();
-
-      // Réaction aux modifications
-      grist.onRecords(function() {
-        toutCharger();
-      });
-
-      window.addEventListener('focus', toutCharger);
-    }
-
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initialiser);
-    } else {
-      initialiser();
-    }
-  </script>
-</body>
-</html>
+    const btnSupprimer =

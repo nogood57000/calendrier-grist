@@ -103,7 +103,7 @@
       display: inline-block;
     }
 
-    /* BANDEAUX HAUTE LISIBILITÉ */
+    /* BANDEAUX HAUTE LISIBILITÉ À L'ÉCRAN */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
@@ -238,7 +238,7 @@
       color: #b91c1c;
     }
 
-    /* BOUTON IMPRIMER DANS LA TOOLBAR */
+    /* BOUTON IMPRIMER */
     .fc-boutonImprimer-button {
       background: #0284c7 !important;
       border-color: #0284c7 !important;
@@ -254,59 +254,120 @@
     }
 
     /* =========================================================
-       FEUILLE DE STYLE D'IMPRESSION (PAYSAGE A4 OPTIMISÉ)
+       CALIBRATION STRICTE A4 PAYSAGE (GARANTI 1 SEULE PAGE)
        ========================================================= */
     @media print {
       @page {
         size: A4 landscape;
-        margin: 8mm;
+        margin: 5mm; /* Marges réduites au maximum */
+      }
+
+      *, *:before, *:after {
+        box-sizing: border-box !important;
       }
 
       html, body {
-        height: auto !important;
-        overflow: visible !important;
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 190mm !important;
+        overflow: hidden !important;
         background: #ffffff !important;
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
       }
 
-      /* Masquer les boutons d'action et éléments hors planning */
+      /* Interdiction absolue de saut de page */
+      body, #calendar-container, #calendar, .fc, .fc-view-harness, .fc-daygrid, table, tbody, tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-before: avoid !important;
+        page-break-after: avoid !important;
+      }
+
+      /* Masquer les boutons inutiles */
       .fc-header-toolbar .fc-toolbar-chunk:first-child,
       .fc-header-toolbar .fc-toolbar-chunk:last-child,
       #fenetre-voeu {
         display: none !important;
       }
 
-      /* Afficher le titre centré du mois */
+      /* Titre du mois compact */
       .fc-header-toolbar {
-        margin-bottom: 8px !important;
+        margin: 0 0 4px 0 !important;
+        padding: 0 !important;
         justify-content: center !important;
       }
+      .fc-toolbar-title {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+      }
 
+      /* Légende ultra-compacte en 1 ligne */
       #barre-legende {
-        padding: 4px 0 !important;
+        padding: 2px 0 4px 0 !important;
         border-bottom: 1px solid #cbd5e1 !important;
-        font-size: 11px !important;
-        margin-bottom: 6px !important;
+        font-size: 9.5px !important;
+        gap: 8px !important;
+        margin-bottom: 4px !important;
+      }
+      .pastille {
+        width: 10px !important;
+        height: 10px !important;
       }
 
       #calendar-container {
         padding: 0 !important;
         height: auto !important;
+        flex: none !important;
       }
 
       #calendar {
         height: auto !important;
       }
 
-      .fc-event {
-        min-height: 32px !important;
+      /* Ajustement automatique de la hauteur des cellules */
+      .fc .fc-daygrid-body {
+        height: auto !important;
+      }
+      .fc .fc-daygrid-day-frame {
+        min-height: auto !important;
+        height: 100% !important;
+      }
+
+      /* Bandeaux optimisés pour l'impression A4 */
+      .fc-event, 
+      .fc-daygrid-event, 
+      .fc-daygrid-block-event {
+        min-height: 24px !important;
+        height: auto !important;
+        margin-top: 1px !important;
+        margin-bottom: 2px !important;
         box-shadow: none !important;
-        border: 1px solid rgba(0,0,0,0.1) !important;
+        border: 1px solid rgba(0,0,0,0.15) !important;
+      }
+
+      .fc-event-main {
+        padding: 1px 4px !important;
+      }
+
+      .event-card {
+        gap: 1px !important;
+        line-height: 1.1 !important;
+      }
+
+      .event-ligne-statut {
+        font-size: 8px !important;
+        padding: 0 3px !important;
       }
 
       .event-ligne-nom {
-        font-size: 12px !important;
+        font-size: 10px !important;
+        font-weight: 700 !important;
+      }
+
+      .etiquette-ferie, .etiquette-vacances {
+        font-size: 8px !important;
+        padding: 0 2px !important;
       }
     }
   </style>

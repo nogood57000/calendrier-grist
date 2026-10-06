@@ -48,25 +48,36 @@
       min-height: 0;
       padding: 8px;
       box-sizing: border-box;
+      position: relative;
     }
     #calendar {
       height: 100%;
+    }
+
+    #compteur-debug {
+      position: absolute;
+      bottom: 6px;
+      right: 12px;
+      font-size: 11px;
+      color: #94a3b8;
+      z-index: 5;
+      pointer-events: none;
     }
 
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
       white-space: normal !important;
-      min-height: 38px !important;
-      margin-bottom: 4px !important;
-      border-radius: 5px !important;
+      min-height: 36px !important;
+      margin-bottom: 3px !important;
+      border-radius: 4px !important;
       border: none !important;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.18);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
       cursor: pointer;
     }
 
     .fc-event-main {
-      padding: 3px 6px !important;
+      padding: 2px 5px !important;
       white-space: normal !important;
     }
 
@@ -74,19 +85,19 @@
       display: flex;
       flex-direction: column;
       gap: 2px;
-      line-height: 1.25;
+      line-height: 1.2;
       text-align: left;
     }
 
     .event-ligne-statut {
       display: inline-block;
-      font-size: 10px;
+      font-size: 9px;
       font-weight: 800;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.3px;
       text-transform: uppercase;
       background: rgba(0, 0, 0, 0.25);
-      padding: 1px 5px;
-      border-radius: 3px;
+      padding: 1px 4px;
+      border-radius: 2px;
       width: fit-content;
     }
 
@@ -107,18 +118,18 @@
     }
     .conteneur-formulaire {
       background: #ffffff;
-      padding: 22px;
+      padding: 20px;
       border-radius: 8px;
-      width: 330px;
+      width: 320px;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     }
     .conteneur-formulaire h3 {
-      margin: 0 0 16px 0;
-      font-size: 16px;
+      margin: 0 0 14px 0;
+      font-size: 15px;
       color: #1e293b;
     }
     .champ {
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
     .champ label {
       display: block;
@@ -129,7 +140,7 @@
     }
     .champ input, .champ select {
       width: 100%;
-      padding: 7px 8px;
+      padding: 6px 8px;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
       box-sizing: border-box;
@@ -140,18 +151,18 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-top: 20px;
+      margin-top: 18px;
     }
     .groupe-actions-droite {
       display: flex;
       gap: 8px;
     }
     .btn {
-      padding: 7px 14px;
+      padding: 6px 12px;
       border-radius: 4px;
       border: none;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 500;
     }
     .btn-gris {
@@ -182,6 +193,7 @@
 
   <div id="calendar-container">
     <div id="calendar"></div>
+    <div id="compteur-debug">Prêt</div>
   </div>
 
   <div id="fenetre-voeu">
@@ -228,8 +240,7 @@
 
   <script>
     let calendar = null;
-    const annuaireAgents = new Map(); // id (string) -> libellé
-    let memoireRecords = [];
+    const annuaireAgents = new Map();
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -245,7 +256,6 @@
       'ASTREINTE': '#7b1fa2'
     };
 
-    // Conversion infaillible des dates (texte ISO, format français, timestamp Unix secondes ou millisecondes)
     function parseDate(val) {
       if (!val) return null;
       if (typeof val === 'string') {
@@ -257,9 +267,7 @@
       if (typeof val === 'number') {
         const ts = val < 10000000000 ? val * 1000 : val;
         const d = new Date(ts);
-        if (!isNaN(d.getTime())) {
-          return d.toISOString().split('T')[0];
-        }
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
       }
       return null;
     }
@@ -271,18 +279,17 @@
       return d.toISOString().split('T')[0];
     }
 
-    // Extraction tolérante des colonnes (gère accents, espaces, minuscules/majuscules)
-    function trouverValeur(row, clesCherchees) {
+    function trouverValeur(row, cles) {
       if (!row) return null;
-      for (const k of clesCherchees) {
+      for (const k of cles) {
         if (row[k] !== undefined && row[k] !== null) return row[k];
       }
-      const cles = Object.keys(row);
-      for (const k of clesCherchees) {
-        const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-        for (const reelle of cles) {
-          if (reelle.toLowerCase().replace(/[^a-z0-9]/g, '') === clean) {
-            if (row[reelle] !== undefined && row[reelle] !== null) return row[reelle];
+      const reelles = Object.keys(row);
+      for (const k of cles) {
+        const pur = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const r of reelles) {
+          if (r.toLowerCase().replace(/[^a-z0-9]/g, '') === pur) {
+            if (row[r] !== undefined && row[r] !== null) return row[r];
           }
         }
       }
@@ -296,6 +303,7 @@
     const inputDebut = document.getElementById('form-debut');
     const inputFin = document.getElementById('form-fin');
     const btnSupprimer = document.getElementById('btn-supprimer');
+    const debugEl = document.getElementById('compteur-debug');
 
     function fermer() {
       modalEl.style.display = 'none';
@@ -308,7 +316,7 @@
 
     btnSupprimer.addEventListener('click', async function() {
       if (!ligneSelectionneeId) return;
-      if (confirm("Supprimer ce vœu de présence ?")) {
+      if (confirm("Supprimer cette présence ?")) {
         try {
           await grist.selectedTable.destroy([ligneSelectionneeId]);
         } catch(e) {
@@ -337,7 +345,7 @@
       }
     }
 
-    async function chargerAnnuaireEquipe() {
+    async function chargerAnnuaireDirect() {
       try {
         const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
         if (t && t.id) {
@@ -354,14 +362,13 @@
       } catch(e) {}
     }
 
-    function traiterEtAfficher(records) {
+    function traiterDonnees(records) {
       if (!records || !calendar) return;
 
-      // 1. Extraire les identités des agents depuis les lignes
+      // 1. Découverte des agents
       records.forEach(r => {
-        const q = trouverValeur(r, ['qui', 'Agent', 'agent']);
-        const txt = trouverValeur(r, ['Agent', 'Identite', 'qui']);
-
+        const q = trouverValeur(r, ['Agent', 'qui']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
         if (typeof q === 'number') {
           const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim())) ? txt.trim() : `Agent #${q}`;
           annuaireAgents.set(String(q), nom);
@@ -375,42 +382,42 @@
 
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
-      // 2. Parser chaque présence
+      // 2. Conversion
       const valides = records.map(r => {
         const debut = parseDate(trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']));
         const fin = parseDate(trouverValeur(r, ['Date fin', 'Date_fin', 'date_fin'])) || debut;
-        const q = trouverValeur(r, ['qui', 'Agent', 'agent']);
-        const txt = trouverValeur(r, ['Agent', 'Identite', 'qui']);
-
-        let agentCle = '';
-        let nomAffiche = 'Agent';
-
-        if (typeof q === 'number') {
-          agentCle = String(q);
-          nomAffiche = annuaireAgents.get(agentCle) || (typeof txt === 'string' && !txt.startsWith('#') ? txt : `Agent #${q}`);
-        } else if (typeof q === 'string' && q.trim()) {
-          agentCle = q.trim();
-          nomAffiche = annuaireAgents.get(agentCle) || agentCle;
-        } else if (q && typeof q === 'object' && q.id) {
-          agentCle = String(q.id);
-          nomAffiche = q.Identite || annuaireAgents.get(agentCle) || `Agent #${agentCle}`;
-        }
-
+        const agentVal = trouverValeur(r, ['Agent', 'qui']);
         const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
-        const conf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
+        const statutConf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
+
+        let agentNom = 'Agent';
+        let agentCle = '';
+
+        if (typeof agentVal === 'string' && agentVal.trim()) {
+          agentNom = agentVal.trim();
+          agentCle = agentVal.trim();
+        } else if (typeof agentVal === 'number') {
+          agentCle = String(agentVal);
+          agentNom = annuaireAgents.get(agentCle) || `Agent #${agentVal}`;
+        } else if (agentVal && typeof agentVal === 'object' && agentVal.id) {
+          agentCle = String(agentVal.id);
+          agentNom = agentVal.Identite || annuaireAgents.get(agentCle) || `Agent #${agentVal.id}`;
+        }
 
         return {
           id: r.id,
           agentCle: agentCle,
-          nomAffiche: nomAffiche,
+          agentNom: agentNom,
           debut: debut,
           fin: fin,
           statut: statut,
-          statutConflit: conf
+          statutConflit: statutConf
         };
       }).filter(r => Boolean(r.debut));
 
-      // 3. Détection des conflits
+      debugEl.textContent = `${valides.length} présence(s) chargée(s)`;
+
+      // 3. Détection conflits et mise en forme
       const events = valides.map((r, index, array) => {
         const sNorm = r.statut.toUpperCase();
         const confNorm = r.statutConflit.toUpperCase();
@@ -450,7 +457,7 @@
 
         return {
           id: String(r.id),
-          title: `[${badgeTexte}] ${r.nomAffiche}`,
+          title: `[${badgeTexte}] ${r.agentNom}`,
           start: r.debut,
           end: addDays(r.fin, 1),
           backgroundColor: couleur,
@@ -459,7 +466,7 @@
           extendedProps: {
             rowId: r.id,
             agentCle: r.agentCle,
-            nomAgent: r.nomAffiche,
+            agentNom: r.agentNom,
             statutInitial: r.statut,
             statutBadge: badgeTexte,
             debutReel: r.debut,
@@ -473,7 +480,6 @@
       calendar.addEventSource(events);
     }
 
-    // Enregistrement
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentVal = selectAgent.value;
       const statut = selectStatut.value;
@@ -507,24 +513,12 @@
           }
           fermer();
         } catch(e2) {
-          const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
-          const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
-          const fieldsTs = { qui: refAgent, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
-          try {
-            if (ligneSelectionneeId) {
-              await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fieldsTs]]);
-            } else {
-              await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fieldsTs]]);
-            }
-            fermer();
-          } catch(e3) {
-            alert("Erreur lors de l'enregistrement.");
-          }
+          alert("Erreur lors de l'enregistrement.");
         }
       }
     });
 
-    function initialiserCalendrier() {
+    function initialiser() {
       const calendarEl = document.getElementById('calendar');
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
@@ -543,7 +537,7 @@
         },
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
-          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
+          const nom = arg.event.extendedProps.agentNom || arg.event.title;
           const conteneur = document.createElement('div');
           conteneur.className = 'event-card';
           conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
@@ -589,24 +583,21 @@
 
       calendar.render();
 
-      // Handshake Grist
+      // Handshake avec requiredAccess: 'full' obligatoire pour le niveau actuel
       grist.ready({ requiredAccess: 'full' });
-      chargerAnnuaireEquipe();
+      chargerAnnuaireDirect();
 
       grist.onRecords(function(records) {
-        if (records && records.length > 0) {
-          memoireRecords = records;
-          traiterEtAfficher(records);
-        } else if (memoireRecords.length > 0) {
-          traiterEtAfficher(memoireRecords);
+        if (records) {
+          traiterDonnees(records);
         }
       });
     }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initialiserCalendrier);
+      document.addEventListener('DOMContentLoaded', initialiser);
     } else {
-      initialiserCalendrier();
+      initialiser();
     }
   </script>
 </body>

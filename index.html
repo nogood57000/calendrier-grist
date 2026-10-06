@@ -147,7 +147,6 @@
       word-break: break-word;
     }
 
-    /* Contraste automatique */
     .theme-sombre .event-ligne-statut {
       background: rgba(0, 0, 0, 0.18);
       color: #0f172a;
@@ -238,6 +237,78 @@
       background: #fee2e2;
       color: #b91c1c;
     }
+
+    /* BOUTON IMPRIMER DANS LA TOOLBAR */
+    .fc-boutonImprimer-button {
+      background: #0284c7 !important;
+      border-color: #0284c7 !important;
+      color: #ffffff !important;
+      font-weight: 600 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+    }
+    .fc-boutonImprimer-button:hover {
+      background: #0369a1 !important;
+      border-color: #0369a1 !important;
+    }
+
+    /* =========================================================
+       FEUILLE DE STYLE D'IMPRESSION (PAYSAGE A4 OPTIMISÉ)
+       ========================================================= */
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 8mm;
+      }
+
+      html, body {
+        height: auto !important;
+        overflow: visible !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+
+      /* Masquer les boutons d'action et éléments hors planning */
+      .fc-header-toolbar .fc-toolbar-chunk:first-child,
+      .fc-header-toolbar .fc-toolbar-chunk:last-child,
+      #fenetre-voeu {
+        display: none !important;
+      }
+
+      /* Afficher le titre centré du mois */
+      .fc-header-toolbar {
+        margin-bottom: 8px !important;
+        justify-content: center !important;
+      }
+
+      #barre-legende {
+        padding: 4px 0 !important;
+        border-bottom: 1px solid #cbd5e1 !important;
+        font-size: 11px !important;
+        margin-bottom: 6px !important;
+      }
+
+      #calendar-container {
+        padding: 0 !important;
+        height: auto !important;
+      }
+
+      #calendar {
+        height: auto !important;
+      }
+
+      .fc-event {
+        min-height: 32px !important;
+        box-shadow: none !important;
+        border: 1px solid rgba(0,0,0,0.1) !important;
+      }
+
+      .event-ligne-nom {
+        font-size: 12px !important;
+      }
+    }
   </style>
 </head>
 <body>
@@ -302,9 +373,10 @@
 
   <script>
     let calendar = null;
-    const annuaireAgents = new Map(); // id (numérique) -> Libellé formaté
+    const annuaireAgents = new Map();
     let cachePresences = [];
     let ligneSelectionneeId = null;
+    let nomTableEquipeDetectee = 'Equipe_en_DTPJJ_de_Moselle';
 
     const PLAGES_VACANCES_ZONE_B = [
       { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
@@ -458,43 +530,66 @@
         }
       }
 
+      for (const [id, label] of liste) {
+        if (!vu.has(label)) {
+          vu.add(label);
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
       if (choix && annuaireAgents.has(parseInt(choix, 10))) {
         selectAgent.value = choix;
       }
     }
 
-    // CHARGEMENT DIRECT ET COMBINÉ DE L'ANNUAIRE
     async function chargerAnnuaire() {
-      try {
-        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
-        if (t && t.id) {
-          const colNom = t.Nom || t.nom || [];
-          const colPrenom = t.Prenom || t.prenom || [];
-          const colFonc = t.Fonction || t.fonction || [];
-          const colIdentite = t.Identite || t.identite || t['Identité'] || [];
+      const candidatsTables = [
+        nomTableEquipeDetectee,
+        'Equipe_en_DTPJJ_de_Moselle',
+        'EQUIPE_EN_DTPJJ_DE_MOSELLE',
+        'INSCRITS_DTPJJ_MOSELLE',
+        'Inscrits_DTPJJ_Moselle',
+        'INSCRIRE_DANS_EQUIPE',
+        'INSCRIPTION_EQUIPE_DTPJJ'
+      ];
 
-          for (let i = 0; i < t.id.length; i++) {
-            const rowId = t.id[i];
-            let lib = '';
+      for (const nomT of candidatsTables) {
+        try {
+          const t = await grist.docApi.fetchTable(nomT);
+          if (t && t.id && t.id.length > 0) {
+            nomTableEquipeDetectee = nomT;
 
-            if (colIdentite && colIdentite[i]) {
-              lib = String(colIdentite[i]).trim();
+            const colNom = t.Nom || t.nom || [];
+            const colPrenom = t.Prenom || t.prenom || [];
+            const colFonc = t.Fonction || t.fonction || [];
+            const colIdentite = t.Identite || t.identite || t['Identité'] || [];
+
+            for (let i = 0; i < t.id.length; i++) {
+              const rowId = t.id[i];
+              let lib = '';
+
+              if (colIdentite && colIdentite[i]) {
+                lib = String(colIdentite[i]).trim();
+              }
+              if (!lib) {
+                const nom = colNom[i] || '';
+                const prenom = colPrenom[i] || '';
+                const fonc = colFonc[i] || '';
+                lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim();
+              }
+
+              if (lib && !lib.includes('NaN')) {
+                annuaireAgents.set(rowId, lib);
+              }
             }
-
-            if (!lib) {
-              const nom = colNom[i] || '';
-              const prenom = colPrenom[i] || '';
-              const fonc = colFonc[i] || '';
-              lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim();
-            }
-
-            if (lib && !lib.includes('NaN')) {
-              annuaireAgents.set(rowId, lib);
-            }
+            majSelectAgents();
+            return;
           }
-          majSelectAgents();
-        }
-      } catch(e) {}
+        } catch(e) {}
+      }
     }
 
     async function toutRecharger() {
@@ -515,6 +610,7 @@
               Agent: p.Agent ? p.Agent[i] : (p.Identite ? p.Identite[i] : null)
             });
           }
+          cachePresences = rows;
           afficherRecords(rows);
           return;
         }
@@ -523,6 +619,7 @@
       try {
         const sel = await grist.docApi.fetchSelectedTable();
         if (Array.isArray(sel) && sel.length > 0) {
+          cachePresences = sel;
           afficherRecords(sel);
         }
       } catch(e2) {}
@@ -531,7 +628,6 @@
     function afficherRecords(records) {
       if (!records || !calendar) return;
 
-      // Résolution automatique si la colonne Agent textuelle est disponible
       records.forEach(r => {
         const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
         const txt = trouverValeur(r, ['Agent', 'Identite']);
@@ -657,7 +753,6 @@
       const agentNum = parseInt(agentVal, 10);
       const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
-      // Sauvegarde immédiate du nom sélectionné pour affichage instantané
       const optionChoisie = selectAgent.options[selectAgent.selectedIndex];
       if (optionChoisie && optionChoisie.textContent) {
         annuaireAgents.set(refAgent, optionChoisie.textContent.trim());
@@ -690,7 +785,15 @@
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
-          right: 'dayGridMonth,dayGridWeek'
+          right: 'boutonImprimer dayGridMonth,dayGridWeek'
+        },
+        customButtons: {
+          boutonImprimer: {
+            text: '🖨️ Imprimer',
+            click: function() {
+              window.print();
+            }
+          }
         },
         buttonText: {
           today: "Aujourd'hui",

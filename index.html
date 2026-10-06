@@ -44,11 +44,11 @@
     }
     .pastille-vacances {
       background: #bae6fd;
-      border: 1px solid #7dd3fc;
+      border: 1px solid #38bdf8;
     }
     .pastille-we-ferie {
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
+      background: #e2e8f0;
+      border: 1px solid #94a3b8;
     }
 
     #calendar-container {
@@ -62,34 +62,52 @@
       height: 100%;
     }
 
-    /* MÊME FOND COLORÉ POUR LES WEEK-ENDS ET JOURS FÉRIÉS */
+    /* 1. MÊME COLORIS POUR LES WEEK-ENDS ET LES JOURS FÉRIÉS (MOSELLE) */
     .fc-day-sat, 
     .fc-day-sun, 
-    .jour-chome-ferie {
+    .cellule-ferie-moselle {
       background-color: #f1f5f9 !important;
     }
 
-    /* VACANCES SCOLAIRES ZONE B EN FOND */
-    .vacances-zone-b-bg {
-      background-color: rgba(186, 230, 253, 0.45) !important;
-      opacity: 1 !important;
+    /* 2. COLORIS DES JOURS DE VACANCES SCOLAIRES ZONE B */
+    .cellule-vacances-zone-b {
+      background-color: #f0f9ff !important; /* Bleu très doux */
     }
 
-    /* BADGES DES JOURS FÉRIÉS */
-    .fc-event-ferie {
-      background: #475569 !important;
-      border: none !important;
-      color: #ffffff !important;
-      font-size: 10px !important;
-      font-weight: 700 !important;
-      padding: 2px 5px !important;
-      border-radius: 3px !important;
-      cursor: default !important;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+    /* Week-end / Férié qui tombe pendant les vacances : teinte combinée lisible */
+    .cellule-vacances-zone-b.fc-day-sat,
+    .cellule-vacances-zone-b.fc-day-sun,
+    .cellule-vacances-zone-b.cellule-ferie-moselle {
+      background-color: #e0f2fe !important;
+    }
+
+    /* Petite étiquette en haut de case pour les jours fériés */
+    .etiquette-ferie {
+      font-size: 9px;
+      font-weight: 700;
+      color: #b91c1c;
+      background: #fee2e2;
+      padding: 1px 3px;
+      border-radius: 2px;
+      margin-left: 4px;
+      display: inline-block;
+    }
+
+    .etiquette-vacances {
+      font-size: 8px;
+      font-weight: 600;
+      color: #0369a1;
+      background: #e0f2fe;
+      padding: 1px 3px;
+      border-radius: 2px;
+      margin-left: 2px;
+      display: inline-block;
     }
 
     /* BLOCS DES PRÉSENCES DES AGENTS */
-    .fc-event-presence {
+    .fc-event, 
+    .fc-daygrid-event, 
+    .fc-daygrid-block-event {
       white-space: normal !important;
       min-height: 38px !important;
       margin-bottom: 3px !important;
@@ -99,7 +117,7 @@
       cursor: pointer;
     }
 
-    .fc-event-presence .fc-event-main {
+    .fc-event-main {
       padding: 2px 5px !important;
       white-space: normal !important;
     }
@@ -209,4 +227,521 @@
     <span class="item-legende"><span class="pastille" style="background:#fbc02d;"></span> Congés</span>
     <span class="item-legende"><span class="pastille" style="background:#1976d2;"></span> Télétravail</span>
     <span class="item-legende"><span class="pastille" style="background:#f57c00;"></span> Déplacement</span>
-    <span class="item-legende"><span class="pastille
+    <span class="item-legende"><span class="pastille" style="background:#388e3c;"></span> Présent</span>
+    <span class="item-legende"><span class="pastille" style="background:#7b1fa2;"></span> Astreinte</span>
+    <span class="item-legende"><span class="pastille" style="background:#d32f2f;"></span> Conflit ⚠</span>
+    <span class="item-legende"><span class="pastille pastille-vacances"></span> Vacances Zone B</span>
+    <span class="item-legende"><span class="pastille pastille-we-ferie"></span> Week-end / Férié (Moselle)</span>
+  </div>
+
+  <div id="calendar-container">
+    <div id="calendar"></div>
+  </div>
+
+  <div id="fenetre-voeu">
+    <div class="conteneur-formulaire">
+      <h3 id="titre-modal">Nouveau vœu de présence</h3>
+      
+      <div class="champ">
+        <label for="form-agent">Membre de l'équipe</label>
+        <select id="form-agent">
+          <option value="">Chargement...</option>
+        </select>
+      </div>
+
+      <div class="champ">
+        <label for="form-statut">Statut</label>
+        <select id="form-statut">
+          <option value="CONGES">CONGES</option>
+          <option value="TELETRAVAIL">TELETRAVAIL</option>
+          <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
+          <option value="PRESENT">PRESENT</option>
+          <option value="ASTREINTE">ASTREINTE</option>
+        </select>
+      </div>
+
+      <div class="champ">
+        <label for="form-debut">Date de début</label>
+        <input type="date" id="form-debut" />
+      </div>
+
+      <div class="champ">
+        <label for="form-fin">Date de fin</label>
+        <input type="date" id="form-fin" />
+      </div>
+
+      <div class="barre-boutons">
+        <button type="button" class="btn btn-rouge" id="btn-supprimer" style="display: none;">Supprimer</button>
+        <div class="groupe-actions-droite">
+          <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
+          <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let calendar = null;
+    const annuaireAgents = new Map();
+    let cachePresences = [];
+    let ligneSelectionneeId = null;
+
+    // 1. Périodes des vacances scolaires Zone B (Académie Nancy-Metz) 2026-2027
+    const PLAGES_VACANCES_ZONE_B = [
+      { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
+      { debut: "2026-12-19", fin: "2027-01-03", nom: "Noël" },
+      { debut: "2027-02-20", fin: "2027-03-07", nom: "Hiver" },
+      { debut: "2027-04-17", fin: "2027-05-02", nom: "Printemps" },
+      { debut: "2027-05-06", fin: "2027-05-09", nom: "Pont Ascension" },
+      { debut: "2027-07-03", fin: "2027-09-01", nom: "Été" }
+    ];
+
+    function estJourVacances(dateStr) {
+      for (const p of PLAGES_VACANCES_ZONE_B) {
+        if (dateStr >= p.debut && dateStr <= p.fin) return p.nom;
+      }
+      return null;
+    }
+
+    // 2. Jours fériés officiels + spécifiques à la Moselle (Vendredi Saint et Saint-Étienne)
+    const DICT_FERIES_MOSELLE = {
+      // 2026
+      "2026-01-01": "Jour de l'An",
+      "2026-04-03": "Vendredi Saint (Moselle)",
+      "2026-04-06": "Lundi de Pâques",
+      "2026-05-01": "Fête du Travail",
+      "2026-05-08": "Victoire 1945",
+      "2026-05-14": "Ascension",
+      "2026-05-25": "Lundi de Pentecôte",
+      "2026-07-14": "Fête Nationale",
+      "2026-08-15": "Assomption",
+      "2026-11-01": "Toussaint",
+      "2026-11-11": "Armistice 1918",
+      "2026-12-25": "Noël",
+      "2026-12-26": "Saint-Étienne (Moselle)",
+      // 2027
+      "2027-01-01": "Jour de l'An",
+      "2027-03-26": "Vendredi Saint (Moselle)",
+      "2027-03-29": "Lundi de Pâques",
+      "2027-05-01": "Fête du Travail",
+      "2027-05-06": "Ascension",
+      "2027-05-08": "Victoire 1945",
+      "2027-05-17": "Lundi de Pentecôte",
+      "2027-07-14": "Fête Nationale",
+      "2027-08-15": "Assomption",
+      "2027-11-01": "Toussaint",
+      "2027-11-11": "Armistice 1918",
+      "2027-12-25": "Noël",
+      "2027-12-26": "Saint-Étienne (Moselle)"
+    };
+
+    const COULEURS = {
+      'CONFLIT': '#d32f2f',
+      'CONGES': '#fbc02d',
+      'CONGÉS': '#fbc02d',
+      'TELETRAVAIL': '#1976d2',
+      'TÉLÉTRAVAIL': '#1976d2',
+      'EN DEPLACEMENT': '#f57c00',
+      'DÉPLACEMENT': '#f57c00',
+      'PRESENT': '#388e3c',
+      'PRÉSENT': '#388e3c',
+      'ASTREINTE': '#7b1fa2'
+    };
+
+    function formatIsoDateLocal(d) {
+      const annee = d.getFullYear();
+      const mois = String(d.getMonth() + 1).padStart(2, '0');
+      const jour = String(d.getDate()).padStart(2, '0');
+      return `${annee}-${mois}-${jour}`;
+    }
+
+    function parseDate(val) {
+      if (!val) return null;
+      if (typeof val === 'string') {
+        const iso = val.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (iso) return iso[1];
+        const fr = val.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+        if (fr) return `${fr[3]}-${fr[2]}-${fr[1]}`;
+      }
+      if (typeof val === 'number') {
+        const ts = val < 10000000000 ? val * 1000 : val;
+        const d = new Date(ts);
+        if (!isNaN(d.getTime())) return formatIsoDateLocal(d);
+      }
+      return null;
+    }
+
+    function addDays(strDate, nb) {
+      if (!strDate) return strDate;
+      const d = new Date(strDate);
+      d.setDate(d.getDate() + nb);
+      return formatIsoDateLocal(d);
+    }
+
+    const modalEl = document.getElementById('fenetre-voeu');
+    const titreModal = document.getElementById('titre-modal');
+    const selectAgent = document.getElementById('form-agent');
+    const selectStatut = document.getElementById('form-statut');
+    const inputDebut = document.getElementById('form-debut');
+    const inputFin = document.getElementById('form-fin');
+    const btnSupprimer = document.getElementById('btn-supprimer');
+
+    function fermer() {
+      modalEl.style.display = 'none';
+      ligneSelectionneeId = null;
+      btnSupprimer.style.display = 'none';
+      if (calendar) calendar.unselect();
+    }
+
+    document.getElementById('btn-annuler').addEventListener('click', fermer);
+
+    btnSupprimer.addEventListener('click', async function() {
+      if (!ligneSelectionneeId) return;
+      if (confirm("Supprimer ce vœu de présence ?")) {
+        try {
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          fermer();
+          await toutCharger();
+        } catch(e) {
+          alert("Erreur lors de la suppression.");
+        }
+      }
+    });
+
+    function majSelectAgents() {
+      const choix = selectAgent.value;
+      selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
+
+      const vu = new Set();
+      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+      for (const [id, label] of liste) {
+        if (!vu.has(label)) {
+          vu.add(label);
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
+      if (choix && annuaireAgents.has(parseInt(choix, 10))) {
+        selectAgent.value = choix;
+      }
+    }
+
+    async function chargerAnnuaire() {
+      try {
+        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
+        if (t && t.id) {
+          annuaireAgents.clear();
+          for (let i = 0; i < t.id.length; i++) {
+            const rowId = t.id[i];
+            const nom = t.Nom ? (t.Nom[i] || '') : '';
+            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
+            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
+            const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
+            annuaireAgents.set(rowId, lib);
+          }
+          majSelectAgents();
+        }
+      } catch(e) {}
+    }
+
+    async function toutCharger() {
+      await chargerAnnuaire();
+
+      try {
+        const p = await grist.docApi.fetchTable('Presences');
+        if (p && p.id) {
+          const rows = [];
+          for (let i = 0; i < p.id.length; i++) {
+            rows.push({
+              id: p.id[i],
+              qui: p.qui ? p.qui[i] : null,
+              Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
+              Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
+              STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
+              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK')
+            });
+          }
+          cachePresences = rows;
+          afficherPresences(rows);
+          return;
+        }
+      } catch(e) {}
+
+      try {
+        const sel = await grist.docApi.fetchSelectedTable();
+        if (Array.isArray(sel) && sel.length > 0) {
+          cachePresences = sel;
+          afficherPresences(sel);
+        }
+      } catch(e2) {}
+    }
+
+    function afficherPresences(records) {
+      if (!records || !calendar) return;
+
+      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+      const valides = records.map(r => {
+        const debut = parseDate(r.Date_debut || r['Date début']);
+        const fin = parseDate(r.Date_fin || r['Date fin']) || debut;
+        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
+        const statut = String(r.STATUT || r.Statut || '').trim();
+        const conf = String(r.Statut_conflit || r.Statut2 || 'OK').trim();
+
+        return {
+          id: r.id,
+          agentId: isNaN(qId) ? null : qId,
+          nomAffiche: annuaireAgents.get(qId) || (r.Agent || `Agent #${qId}`),
+          debut: debut,
+          fin: fin,
+          statut: statut,
+          statutConflit: conf
+        };
+      }).filter(r => Boolean(r.debut));
+
+      const eventsPresences = valides.map((r, index, array) => {
+        const sNorm = r.statut.toUpperCase();
+        const confNorm = r.statutConflit.toUpperCase();
+
+        const doublonInterdit = array.some((autre, autreIdx) => {
+          if (index === autreIdx) return false;
+          if (!r.agentId || r.agentId !== autre.agentId) return false;
+
+          const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
+          if (!chevauche) return false;
+
+          const autreSNorm = autre.statut.toUpperCase();
+          const unAstreinte = sNorm.includes('ASTREINTE');
+          const autreAstreinte = autreSNorm.includes('ASTREINTE');
+
+          if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
+          if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
+
+          return true;
+        });
+
+        const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
+
+        let couleur = '#3788d8';
+        if (estEnConflit) {
+          couleur = COULEURS['CONFLIT'];
+        } else {
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (sNorm.includes(cle)) {
+              couleur = val;
+              break;
+            }
+          }
+        }
+
+        const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : (r.statut || 'PRESENCE');
+
+        return {
+          id: String(r.id),
+          title: `[${badgeTexte}] ${r.nomAffiche}`,
+          start: r.debut,
+          end: addDays(r.fin, 1),
+          backgroundColor: couleur,
+          borderColor: couleur,
+          allDay: true,
+          extendedProps: {
+            rowId: r.id,
+            agentId: r.agentId,
+            nomAgent: r.nomAffiche,
+            statutInitial: r.statut,
+            statutBadge: badgeTexte,
+            debutReel: r.debut,
+            finReelle: r.fin,
+            periodeTexte: `${r.debut} au ${r.fin}`
+          }
+        };
+      });
+
+      calendar.removeAllEvents();
+      calendar.addEventSource(eventsPresences);
+    }
+
+    document.getElementById('btn-valider').addEventListener('click', async function() {
+      const agentId = parseInt(selectAgent.value, 10);
+      const statut = selectStatut.value;
+      const debut = inputDebut.value;
+      const fin = inputFin.value;
+
+      if (isNaN(agentId) || !debut || !fin) {
+        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
+        return;
+      }
+
+      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+
+      const champsRecord = {
+        qui: agentId,
+        STATUT: statut,
+        Date_debut: tsDebut,
+        Date_fin: tsFin
+      };
+
+      try {
+        if (ligneSelectionneeId) {
+          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, champsRecord]]);
+        } else {
+          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, champsRecord]]);
+        }
+        fermer();
+        await toutCharger();
+      } catch (err) {
+        try {
+          const champsIso = { qui: agentId, STATUT: statut, Date_debut: debut, Date_fin: fin };
+          if (ligneSelectionneeId) {
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: champsIso });
+          } else {
+            await grist.selectedTable.create({ fields: champsIso });
+          }
+          fermer();
+          await toutCharger();
+        } catch(e2) {
+          alert("Erreur lors de l'enregistrement dans Grist.");
+        }
+      }
+    });
+
+    function initialiser() {
+      const calendarEl = document.getElementById('calendar');
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'fr',
+        firstDay: 1,
+        selectable: true,
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'dayGridMonth,dayGridWeek'
+        },
+        buttonText: {
+          today: "Aujourd'hui",
+          month: 'Mois',
+          week: 'Semaine'
+        },
+
+        // 1. APPLICATION NATIVE DES COULEURS DE FOND (Week-ends, Fériés Moselle, Vacances Zone B)
+        dayCellClassNames: function(arg) {
+          const classes = [];
+          const dStr = formatIsoDateLocal(arg.date);
+
+          if (DICT_FERIES_MOSELLE[dStr]) {
+            classes.push('cellule-ferie-moselle');
+          }
+          if (estJourVacances(dStr)) {
+            classes.push('cellule-vacances-zone-b');
+          }
+          return classes;
+        },
+
+        // 2. ÉTIQUETTES DANS L'EN-TÊTE DU JOUR (Jour férié + Vacances Zone B)
+        dayCellContent: function(arg) {
+          const dStr = formatIsoDateLocal(arg.date);
+          const div = document.createElement('div');
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.justifyContent = 'space-between';
+          div.style.padding = '2px 4px';
+
+          const spanNumero = document.createElement('span');
+          spanNumero.textContent = arg.dayNumberText;
+          div.appendChild(spanNumero);
+
+          const nomFerie = DICT_FERIES_MOSELLE[dStr];
+          if (nomFerie) {
+            const badgeF = document.createElement('span');
+            badgeF.className = 'etiquette-ferie';
+            badgeF.textContent = nomFerie;
+            badgeF.title = `Jour férié : ${nomFerie}`;
+            div.appendChild(badgeF);
+          } else {
+            const nomVac = estJourVacances(dStr);
+            if (nomVac && arg.date.getDay() === 1) { // Affiche un discret repère le lundi
+              const badgeV = document.createElement('span');
+              badgeV.className = 'etiquette-vacances';
+              badgeV.textContent = 'Vacances B';
+              div.appendChild(badgeV);
+            }
+          }
+
+          return { domNodes: [div] };
+        },
+
+        // 3. RENDU DES VŒUX DE PRÉSENCE (Garanti sans crash)
+        eventContent: function(arg) {
+          const badge = arg.event.extendedProps.statutBadge || '';
+          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
+          const conteneur = document.createElement('div');
+          conteneur.className = 'event-card';
+          conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
+          conteneur.innerHTML = `
+            <div><span class="event-ligne-statut">${badge}</span></div>
+            <div class="event-ligne-nom">${nom}</div>
+          `;
+          return { domNodes: [conteneur] };
+        },
+
+        select: function(info) {
+          ligneSelectionneeId = null;
+          titreModal.textContent = "Nouveau vœu de présence";
+          btnSupprimer.style.display = "none";
+          inputDebut.value = info.startStr;
+          const f = new Date(info.endStr);
+          f.setDate(f.getDate() - 1);
+          inputFin.value = formatIsoDateLocal(f);
+          majSelectAgents();
+          modalEl.style.display = 'flex';
+        },
+
+        eventClick: function(info) {
+          const props = info.event.extendedProps;
+          ligneSelectionneeId = props.rowId;
+          titreModal.textContent = "Modifier la présence";
+          btnSupprimer.style.display = "inline-block";
+          inputDebut.value = props.debutReel;
+          inputFin.value = props.finReelle;
+          majSelectAgents();
+          if (props.agentId) {
+            selectAgent.value = String(props.agentId);
+          }
+          const sInit = props.statutInitial.toUpperCase();
+          for (let opt of selectStatut.options) {
+            if (sInit.includes(opt.value)) {
+              selectStatut.value = opt.value;
+              break;
+            }
+          }
+          modalEl.style.display = 'flex';
+        },
+        events: []
+      });
+
+      calendar.render();
+
+      grist.ready({ requiredAccess: 'full' });
+
+      toutCharger();
+
+      grist.onRecords(function() {
+        toutCharger();
+      });
+
+      window.addEventListener('focus', toutCharger);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialiser);
+    } else {
+      initialiser();
+    }
+  </script>
+</body>
+</html>

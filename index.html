@@ -228,8 +228,8 @@
 
   <script>
     let calendar = null;
-    const annuaireAgents = new Map(); // id (string) -> libellé
-    let memoireDerniersRecords = [];
+    const annuaireAgents = new Map(); // id (string) -> libelle
+    let derniersRecords = [];
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -245,44 +245,40 @@
       'ASTREINTE': '#7b1fa2'
     };
 
-    function parseDateStr(v) {
-      if (!v) return null;
-      if (typeof v === 'string') {
-        const m = v.match(/^(\d{4}-\d{2}-\d{2})/);
-        if (m) return m[1];
-        const fr = v.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+    function parseDate(val) {
+      if (!val) return null;
+      if (typeof val === 'string') {
+        const iso = val.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (iso) return iso[1];
+        const fr = val.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
         if (fr) return `${fr[3]}-${fr[2]}-${fr[1]}`;
       }
-      if (typeof v === 'number') {
-        const ts = v < 10000000000 ? v * 1000 : v;
+      if (typeof val === 'number') {
+        const ts = val < 10000000000 ? val * 1000 : val;
         const d = new Date(ts);
         if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
       }
       return null;
     }
 
-    function addOneDay(str) {
-      if (!str) return str;
-      const d = new Date(str);
-      d.setDate(d.getDate() + 1);
+    function addDays(strDate, nb) {
+      if (!strDate) return strDate;
+      const d = new Date(strDate);
+      d.setDate(d.getDate() + nb);
       return d.toISOString().split('T')[0];
     }
 
-    function normaliser(s) {
-      return String(s || '').toUpperCase().trim();
-    }
-
-    function getVal(row, noms) {
+    function trouverValeur(row, clesCherchees) {
       if (!row) return null;
-      for (const n of noms) {
-        if (row[n] !== undefined && row[n] !== null) return row[n];
+      for (const k of clesCherchees) {
+        if (row[k] !== undefined && row[k] !== null) return row[k];
       }
-      const cles = Object.keys(row);
-      for (const n of noms) {
-        const pur = n.toLowerCase().replace(/[^a-z0-9]/g, '');
-        for (const k of cles) {
-          if (k.toLowerCase().replace(/[^a-z0-9]/g, '') === pur) {
-            if (row[k] !== undefined && row[k] !== null) return row[k];
+      const toutesLesCles = Object.keys(row);
+      for (const k of clesCherchees) {
+        const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const reelle of toutesLesCles) {
+          if (reelle.toLowerCase().replace(/[^a-z0-9]/g, '') === clean) {
+            if (row[reelle] !== undefined && row[reelle] !== null) return row[reelle];
           }
         }
       }
@@ -337,8 +333,7 @@
       }
     }
 
-    // Tente de récupérer toute l'équipe sans interrompre l'exécution
-    async function chargerTableEquipe() {
+    async function tenterChargerAnnuaire() {
       try {
         const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
         if (t && t.id) {
@@ -355,21 +350,19 @@
       } catch(e) {}
     }
 
-    function afficherSurCalendrier(records) {
+    function traiterDonnees(records) {
       if (!records || !calendar) return;
 
-      // Extraire les noms des agents depuis les références de colonnes
+      // Extraire les noms des agents depuis les colonnes visibles de chaque ligne
       records.forEach(r => {
-        const q = getVal(r, ['qui', 'Agent', 'agent']);
-        const txt = getVal(r, ['Agent', 'Identite', 'nom', 'qui']);
+        const rawAgent = trouverValeur(r, ['Agent', 'qui', 'qui_Agent', 'qui.Agent']);
+        const rawId = (r.qui && typeof r.qui === 'number') ? r.qui : r.id;
 
-        if (typeof q === 'number') {
-          const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim()) && !txt.startsWith('#')) ? txt.trim() : `Agent #${q}`;
-          annuaireAgents.set(String(q), nom);
-        } else if (typeof q === 'string' && q.trim() && !/^\d+$/.test(q.trim()) && !q.startsWith('#')) {
-          annuaireAgents.set(q.trim(), q.trim());
-        } else if (q && typeof q === 'object' && q.id) {
-          annuaireAgents.set(String(q.id), q.Identite || `Agent #${q.id}`);
+        if (typeof rawAgent === 'string' && rawAgent.trim() && !rawAgent.startsWith('#')) {
+          annuaireAgents.set(rawAgent.trim(), rawAgent.trim());
+          if (r.qui && typeof r.qui === 'number') {
+            annuaireAgents.set(String(r.qui), rawAgent.trim());
+          }
         }
       });
       majSelectAgents();
@@ -377,32 +370,27 @@
       const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
 
       const valides = records.map(r => {
-        const debut = parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut', 'DateDebut']));
-        const fin = parseDateStr(getVal(r, ['Date_fin', 'Date fin', 'date_fin', 'DateFin'])) || debut;
-        const q = getVal(r, ['qui', 'Agent', 'agent']);
-        const txt = getVal(r, ['Agent', 'Identite', 'qui']);
+        const debut = parseDate(trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']));
+        const fin = parseDate(trouverValeur(r, ['Date fin', 'Date_fin', 'date_fin'])) || debut;
+        const agentVal = trouverValeur(r, ['Agent', 'qui']);
+        const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
+        const statutConf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
 
+        let agentNom = 'Agent';
         let agentCle = '';
-        let nomAffiche = 'Agent';
 
-        if (typeof q === 'number') {
-          agentCle = String(q);
-          nomAffiche = annuaireAgents.get(agentCle) || (typeof txt === 'string' && !txt.startsWith('#') ? txt : `Agent #${q}`);
-        } else if (typeof q === 'string' && q.trim()) {
-          agentCle = q.trim();
-          nomAffiche = annuaireAgents.get(agentCle) || agentCle;
-        } else if (q && typeof q === 'object' && q.id) {
-          agentCle = String(q.id);
-          nomAffiche = q.Identite || annuaireAgents.get(agentCle) || `Agent #${agentCle}`;
+        if (typeof agentVal === 'string' && agentVal.trim()) {
+          agentNom = agentVal.trim();
+          agentCle = agentVal.trim();
+        } else if (typeof agentVal === 'number') {
+          agentCle = String(agentVal);
+          agentNom = annuaireAgents.get(agentCle) || `Agent #${agentVal}`;
         }
-
-        const statut = String(getVal(r, ['STATUT', 'Statut', 'statut']) || '').trim();
-        const statutConf = String(getVal(r, ['Statut_conflit', 'Statut conflit', 'statut_conflit', 'Statut2']) || 'OK').trim();
 
         return {
           id: r.id,
           agentCle: agentCle,
-          nomAffiche: nomAffiche,
+          agentNom: agentNom,
           debut: debut,
           fin: fin,
           statut: statut,
@@ -410,9 +398,10 @@
         };
       }).filter(r => Boolean(r.debut));
 
+      // Détection de conflit
       const events = valides.map((r, index, array) => {
-        const sNorm = normaliser(r.statut);
-        const confNorm = normaliser(r.statutConflit);
+        const sNorm = r.statut.toUpperCase();
+        const confNorm = r.statutConflit.toUpperCase();
 
         const doublonInterdit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
@@ -421,7 +410,7 @@
           const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
           if (!chevauche) return false;
 
-          const autreSNorm = normaliser(autre.statut);
+          const autreSNorm = autre.statut.toUpperCase();
           const unAstreinte = sNorm.includes('ASTREINTE');
           const autreAstreinte = autreSNorm.includes('ASTREINTE');
 
@@ -449,21 +438,20 @@
 
         return {
           id: String(r.id),
-          title: `[${badgeTexte}] ${r.nomAffiche}`,
+          title: `[${badgeTexte}] ${r.agentNom}`,
           start: r.debut,
-          end: addOneDay(r.fin),
+          end: addDays(r.fin, 1),
           backgroundColor: couleur,
           borderColor: couleur,
           allDay: true,
           extendedProps: {
             rowId: r.id,
             agentCle: r.agentCle,
-            nomAgent: r.nomAffiche,
+            agentNom: r.agentNom,
             statutInitial: r.statut,
             statutBadge: badgeTexte,
             debutReel: r.debut,
             finReelle: r.fin,
-            estConflit: estEnConflit,
             periodeTexte: `${r.debut} au ${r.fin}`
           }
         };
@@ -488,54 +476,49 @@
       const agentNum = parseInt(agentVal, 10);
       const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
-      const fieldsIso = { qui: refAgent, STATUT: statut, Date_debut: debut, Date_fin: fin };
-      const fieldsFr = { Agent: refAgent, STATUT: statut, "Date début": debut, "Date fin": fin };
+      // Essayer avec les noms exacts de vos colonnes
+      const fields = {
+        "Date début": debut,
+        "Date fin": fin,
+        "Agent": refAgent,
+        "STATUT": statut
+      };
 
       try {
         if (ligneSelectionneeId) {
-          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
+          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fields });
         } else {
-          await grist.selectedTable.create({ fields: fieldsIso });
+          await grist.selectedTable.create({ fields: fields });
         }
         fermer();
-      } catch (err) {
+      } catch(e) {
+        // Variante interne
+        const fieldsAlt = {
+          "Date_debut": debut,
+          "Date_fin": fin,
+          "qui": refAgent,
+          "STATUT": statut
+        };
         try {
           if (ligneSelectionneeId) {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsFr });
+            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsAlt });
           } else {
-            await grist.selectedTable.create({ fields: fieldsFr });
+            await grist.selectedTable.create({ fields: fieldsAlt });
           }
           fermer();
         } catch(e2) {
-          const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
-          const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
-          const fieldsTs = { qui: refAgent, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
-          try {
-            if (ligneSelectionneeId) {
-              await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, fieldsTs]]);
-            } else {
-              await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, fieldsTs]]);
-            }
-            fermer();
-          } catch(e3) {
-            alert("Erreur lors de l'enregistrement.");
-          }
+          alert("Erreur lors de l'enregistrement.");
         }
       }
     });
 
-    // Initialisation immédiate et garantie du calendrier
-    function demarrerCalendrier() {
+    function initialiser() {
       const calendarEl = document.getElementById('calendar');
-      if (!calendarEl || calendar) return;
-
       calendar = new FullCalendar.Calendar(calendarEl, {
         initialView: 'dayGridMonth',
         locale: 'fr',
         firstDay: 1,
         selectable: true,
-        selectMirror: false,
-        allDayText: 'Journée',
         headerToolbar: {
           left: 'prev,next today',
           center: 'title',
@@ -546,92 +529,78 @@
           month: 'Mois',
           week: 'Semaine'
         },
-
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
-          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
-          
+          const nom = arg.event.extendedProps.agentNom || arg.event.title;
           const conteneur = document.createElement('div');
           conteneur.className = 'event-card';
-          conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}\n(Cliquez pour modifier ou supprimer)`;
-
+          conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
           conteneur.innerHTML = `
             <div><span class="event-ligne-statut">${badge}</span></div>
             <div class="event-ligne-nom">${nom}</div>
           `;
           return { domNodes: [conteneur] };
         },
-
         select: function(info) {
           ligneSelectionneeId = null;
           titreModal.textContent = "Nouveau vœu de présence";
           btnSupprimer.style.display = "none";
-
           inputDebut.value = info.startStr;
-          const finCalculee = new Date(info.endStr);
-          finCalculee.setDate(finCalculee.getDate() - 1);
-          inputFin.value = finCalculee.toISOString().split('T')[0];
-
+          const f = new Date(info.endStr);
+          f.setDate(f.getDate() - 1);
+          inputFin.value = f.toISOString().split('T')[0];
           majSelectAgents();
           modalEl.style.display = 'flex';
         },
-
         eventClick: function(info) {
           const props = info.event.extendedProps;
           ligneSelectionneeId = props.rowId;
-
           titreModal.textContent = "Modifier la présence";
           btnSupprimer.style.display = "inline-block";
-
           inputDebut.value = props.debutReel;
           inputFin.value = props.finReelle;
-
           majSelectAgents();
-
           if (props.agentCle && annuaireAgents.has(props.agentCle)) {
             selectAgent.value = props.agentCle;
           }
-
-          const sInit = normaliser(props.statutInitial);
+          const sInit = props.statutInitial.toUpperCase();
           for (let opt of selectStatut.options) {
             if (sInit.includes(opt.value)) {
               selectStatut.value = opt.value;
               break;
             }
           }
-
           modalEl.style.display = 'flex';
         },
-
         events: []
       });
 
       calendar.render();
+
+      // Démarrage Grist
+      try {
+        grist.ready({ requiredAccess: 'full' });
+      } catch(e) {
+        grist.ready();
+      }
+
+      tenterChargerAnnuaire();
+
+      grist.onRecords(function(records) {
+        if (records && records.length > 0) {
+          derniersRecords = records;
+          traiterDonnees(records);
+        } else if (derniersRecords.length > 0) {
+          traiterDonnees(derniersRecords);
+        }
+      });
     }
 
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', demarrerCalendrier);
+      document.addEventListener('DOMContentLoaded', initialiser);
     } else {
-      demarrerCalendrier();
+      initialiser();
     }
-
-    // Connexion Grist sans dépendance à localStorage
-    grist.ready();
-    chargerTableEquipe();
-
-    grist.onRecords(function(records) {
-      if (records && records.length > 0) {
-        const aDesDates = records.some(r => parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut'])) !== null);
-        if (aDesDates) {
-          memoireDerniersRecords = records;
-          afficherSurCalendrier(records);
-        } else if (memoireDerniersRecords.length > 0) {
-          afficherSurCalendrier(memoireDerniersRecords);
-        }
-      } else if (memoireDerniersRecords.length > 0) {
-        afficherSurCalendrier(memoireDerniersRecords);
-      }
-    });
   </script>
 </body>
 </html>

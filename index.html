@@ -22,23 +22,23 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 12px;
-      padding: 8px 14px;
+      gap: 14px;
+      padding: 9px 16px;
       background: #f8fafc;
       border-bottom: 1px solid #e2e8f0;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       color: #334155;
     }
     .item-legende {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: 7px;
     }
     .pastille {
-      width: 13px;
-      height: 13px;
-      border-radius: 3px;
+      width: 14px;
+      height: 14px;
+      border-radius: 4px;
       display: inline-block;
       box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }
@@ -54,7 +54,7 @@
     #calendar-container {
       flex: 1;
       min-height: 0;
-      padding: 8px;
+      padding: 10px;
       box-sizing: border-box;
       position: relative;
     }
@@ -62,7 +62,7 @@
       height: 100%;
     }
 
-    /* MÊME COLORIS POUR LES WEEK-ENDS ET LES JOURS FÉRIÉS (MOSELLE) */
+    /* COLORIS IDENTIQUE WEEK-ENDS ET JOURS FÉRIÉS (MOSELLE) */
     .fc-day-sat, 
     .fc-day-sun, 
     .cellule-ferie-moselle {
@@ -74,7 +74,6 @@
       background-color: #f0f9ff !important;
     }
 
-    /* Week-end / Férié en période de vacances */
     .cellule-vacances-zone-b.fc-day-sat,
     .cellule-vacances-zone-b.fc-day-sun,
     .cellule-vacances-zone-b.cellule-ferie-moselle {
@@ -82,71 +81,75 @@
     }
 
     .etiquette-ferie {
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
       color: #b91c1c;
       background: #fee2e2;
-      padding: 1px 3px;
-      border-radius: 2px;
+      padding: 2px 5px;
+      border-radius: 3px;
       margin-left: 4px;
       display: inline-block;
     }
 
     .etiquette-vacances {
-      font-size: 8px;
+      font-size: 9px;
       font-weight: 600;
       color: #0369a1;
       background: #e0f2fe;
-      padding: 1px 3px;
-      border-radius: 2px;
-      margin-left: 2px;
+      padding: 2px 4px;
+      border-radius: 3px;
+      margin-left: 3px;
       display: inline-block;
     }
 
-    /* BLOCS DES PRÉSENCES */
+    /* --- OPTIMISATION VISUELLE DES PLAGES : PLUS HAUTES ET PLUS LISIBLES --- */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
       white-space: normal !important;
-      min-height: 38px !important;
-      margin-bottom: 3px !important;
-      border-radius: 4px !important;
+      min-height: 50px !important;            /* Épaisseur nettement rehaussée */
+      margin-bottom: 5px !important;           /* Espacement plus net entre bandes */
+      border-radius: 6px !important;
       border: none !important;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      box-shadow: 0 2px 4px rgba(0,0,0,0.18);
       cursor: pointer;
     }
 
     .fc-event-main {
-      padding: 2px 5px !important;
+      padding: 4px 8px !important;             /* Marges intérieures généreuses */
       white-space: normal !important;
     }
 
     .event-card {
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      line-height: 1.2;
+      gap: 3px;
+      line-height: 1.25;
       text-align: left;
     }
 
     .event-ligne-statut {
       display: inline-block;
-      font-size: 9px;
+      font-size: 10.5px;                       /* Badge plus visible */
       font-weight: 800;
-      letter-spacing: 0.3px;
+      letter-spacing: 0.4px;
       text-transform: uppercase;
-      background: rgba(0, 0, 0, 0.25);
-      padding: 1px 4px;
-      border-radius: 2px;
+      background: rgba(0, 0, 0, 0.28);
+      padding: 1px 6px;
+      border-radius: 3px;
       width: fit-content;
+      color: #ffffff;
     }
 
     .event-ligne-nom {
-      font-size: 11px;
-      font-weight: 600;
+      font-size: 13px;                         /* Nom nettement plus grand */
+      font-weight: 700;                        /* Texte bien affirmé */
+      color: #ffffff;
       word-break: break-word;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     }
 
+    /* FORMULAIRE MODAL */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -158,18 +161,18 @@
     }
     .conteneur-formulaire {
       background: #ffffff;
-      padding: 20px;
+      padding: 22px;
       border-radius: 8px;
-      width: 320px;
+      width: 330px;
       box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
     }
     .conteneur-formulaire h3 {
-      margin: 0 0 14px 0;
-      font-size: 15px;
+      margin: 0 0 16px 0;
+      font-size: 16px;
       color: #1e293b;
     }
     .champ {
-      margin-bottom: 10px;
+      margin-bottom: 12px;
     }
     .champ label {
       display: block;
@@ -180,7 +183,7 @@
     }
     .champ input, .champ select {
       width: 100%;
-      padding: 6px 8px;
+      padding: 7px 8px;
       border: 1px solid #cbd5e1;
       border-radius: 4px;
       box-sizing: border-box;
@@ -198,11 +201,11 @@
       gap: 8px;
     }
     .btn {
-      padding: 6px 12px;
+      padding: 7px 14px;
       border-radius: 4px;
       border: none;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 500;
     }
     .btn-gris {
@@ -285,7 +288,7 @@
     let memoireDerniersRecords = [];
     let ligneSelectionneeId = null;
 
-    // 1. Périodes des vacances scolaires Zone B (Académie Nancy-Metz) 2026-2027
+    // 1. Vacances scolaires Zone B (Nancy-Metz)
     const PLAGES_VACANCES_ZONE_B = [
       { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
       { debut: "2026-12-19", fin: "2027-01-03", nom: "Noël" },
@@ -302,7 +305,7 @@
       return null;
     }
 
-    // 2. Jours fériés officiels + spécifiques Alsace-Moselle (Vendredi Saint et Saint-Étienne)
+    // 2. Fériés officiels + spécifiques Alsace-Moselle
     const DICT_FERIES_MOSELLE = {
       // 2026
       "2026-01-01": "Jour de l'An",
@@ -435,4 +438,64 @@
       for (const [id, label] of liste) {
         if (!vu.has(label)) {
           vu.add(label);
-          const opt = document.
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
+      if (choix && annuaireAgents.has(parseInt(choix, 10))) {
+        selectAgent.value = choix;
+      }
+    }
+
+    async function chargerAnnuaireOptionnel() {
+      try {
+        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
+        if (t && t.id) {
+          for (let i = 0; i < t.id.length; i++) {
+            const rowId = t.id[i];
+            const nom = t.Nom ? (t.Nom[i] || '') : '';
+            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
+            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
+            const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
+            annuaireAgents.set(rowId, lib);
+          }
+          majSelectAgents();
+        }
+      } catch(e) {}
+    }
+
+    function traiterEtAfficher(records) {
+      if (!records || !calendar) return;
+
+      // Découverte des noms réels (empêche l'apparition de "Agent #NaN")
+      records.forEach(r => {
+        const q = trouverValeur(r, ['Agent', 'qui']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
+        if (typeof q === 'number') {
+          const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim())) ? txt.trim() : `Agent #${q}`;
+          annuaireAgents.set(q, nom);
+        } else if (typeof q === 'string' && q.trim()) {
+          annuaireAgents.set(q.trim(), q.trim());
+        } else if (q && typeof q === 'object' && q.id) {
+          annuaireAgents.set(q.id, q.Identite || `Agent #${q.id}`);
+        }
+      });
+      majSelectAgents();
+
+      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+      const valides = records.map(r => {
+        const debut = parseDate(trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']));
+        const fin = parseDate(trouverValeur(r, ['Date fin', 'Date_fin', 'date_fin'])) || debut;
+        const q = trouverValeur(r, ['Agent', 'qui']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
+
+        let agentCle = '';
+        let nomAffiche = 'Agent';
+
+        if (typeof q === 'number') {
+          agentCle = String(q);
+          nomAffiche = annuaireAgents.get(q) || (typeof txt === 'string' && !txt.startsWith('#') ? txt : `Agent #${q}`);

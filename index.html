@@ -2,7 +2,7 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>Calendrier des présences</title>
+  <title>Calendrier des présences DTPJJ Moselle</title>
   <script src="https://docs.getgrist.com/grist-plugin-api.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@fullcalendar/core@6.1.10/locales/fr.global.min.js"></script>
@@ -43,13 +43,12 @@
       box-shadow: 0 1px 2px rgba(0,0,0,0.15);
     }
     .pastille-vacances {
-      background: repeating-linear-gradient(
-        45deg,
-        #e2e8f0,
-        #e2e8f0 3px,
-        #cbd5e1 3px,
-        #cbd5e1 6px
-      );
+      background: #bae6fd;
+      border: 1px solid #7dd3fc;
+    }
+    .pastille-we-ferie {
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
     }
 
     #calendar-container {
@@ -63,16 +62,33 @@
       height: 100%;
     }
 
-    /* Style des vacances en arrière-plan */
-    .fc-bg-event.zone-b-vacances {
-      background: rgba(186, 230, 253, 0.45) !important; /* Bleu très doux */
+    /* Coloris de fond identique pour week-end et jours fériés */
+    .fc-day-sat, .fc-day-sun, .cellule-ferie {
+      background-color: #f1f5f9 !important;
+    }
+
+    /* Arrière-plan Vacances Zone B */
+    .vacances-zone-b-bg {
+      background-color: rgba(186, 230, 253, 0.45) !important;
       opacity: 1 !important;
       border: none !important;
     }
 
-    .fc-event, 
-    .fc-daygrid-event, 
-    .fc-daygrid-block-event {
+    /* Badges des jours fériés */
+    .fc-event-ferie {
+      background: #475569 !important;
+      border: none !important;
+      color: #ffffff !important;
+      font-size: 10px !important;
+      font-weight: 700 !important;
+      padding: 1px 4px !important;
+      border-radius: 3px !important;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.2) !important;
+      cursor: default !important;
+    }
+
+    /* Présences des agents */
+    .fc-event-presence {
       white-space: normal !important;
       min-height: 38px !important;
       margin-bottom: 3px !important;
@@ -82,7 +98,7 @@
       cursor: pointer;
     }
 
-    .fc-event-main {
+    .fc-event-presence .fc-event-main {
       padding: 2px 5px !important;
       white-space: normal !important;
     }
@@ -195,7 +211,8 @@
     <span class="item-legende"><span class="pastille" style="background:#388e3c;"></span> Présent</span>
     <span class="item-legende"><span class="pastille" style="background:#7b1fa2;"></span> Astreinte</span>
     <span class="item-legende"><span class="pastille" style="background:#d32f2f;"></span> Conflit ⚠</span>
-    <span class="item-legende"><span class="pastille pastille-vacances" style="background:#bae6fd;"></span> Vacances Zone B</span>
+    <span class="item-legende"><span class="pastille pastille-vacances"></span> Vacances Zone B</span>
+    <span class="item-legende"><span class="pastille pastille-we-ferie"></span> Week-end / Férié (Moselle)</span>
   </div>
 
   <div id="calendar-container">
@@ -250,51 +267,49 @@
     let cachePresences = [];
     let ligneSelectionneeId = null;
 
-    // Calendrier officiel Zone B (2026 - 2027)
+    // 1. Vacances scolaires Zone B officielles (2026 - 2027)
     const VACANCES_ZONE_B = [
-      {
-        title: "Vacances de la Toussaint (Zone B)",
-        start: "2026-10-17",
-        end: "2026-11-02",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      },
-      {
-        title: "Vacances de Noël (Zone B)",
-        start: "2026-12-19",
-        end: "2027-01-04",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      },
-      {
-        title: "Vacances d'hiver (Zone B)",
-        start: "2027-02-20",
-        end: "2027-03-08",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      },
-      {
-        title: "Vacances de printemps (Zone B)",
-        start: "2027-04-17",
-        end: "2027-05-03",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      },
-      {
-        title: "Pont de l'Ascension (Zone B)",
-        start: "2027-05-06",
-        end: "2027-05-10",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      },
-      {
-        title: "Grandes vacances d'été (Zone B)",
-        start: "2027-07-03",
-        end: "2027-09-02",
-        display: "background",
-        classNames: ["zone-b-vacances"]
-      }
+      { id: "vac-toussaint-26", title: "Vacances Toussaint (Zone B)", start: "2026-10-17", end: "2026-11-02", display: "background", classNames: ["vacances-zone-b-bg"] },
+      { id: "vac-noel-26", title: "Vacances Noël (Zone B)", start: "2026-12-19", end: "2027-01-04", display: "background", classNames: ["vacances-zone-b-bg"] },
+      { id: "vac-hiver-27", title: "Vacances Hiver (Zone B)", start: "2027-02-20", end: "2027-03-08", display: "background", classNames: ["vacances-zone-b-bg"] },
+      { id: "vac-printemps-27", title: "Vacances Printemps (Zone B)", start: "2027-04-17", end: "2027-05-03", display: "background", classNames: ["vacances-zone-b-bg"] },
+      { id: "vac-ascension-27", title: "Pont Ascension (Zone B)", start: "2027-05-06", end: "2027-05-10", display: "background", classNames: ["vacances-zone-b-bg"] },
+      { id: "vac-ete-27", title: "Vacances Été (Zone B)", start: "2027-07-03", end: "2027-09-02", display: "background", classNames: ["vacances-zone-b-bg"] }
     ];
+
+    // 2. Jours fériés officiels + spécifiques Alsace-Moselle (Vendredi Saint et Saint-Étienne)
+    const FERIES_MOSELLE = [
+      // Année 2026
+      { title: "FÉRIÉ : Jour de l'An", date: "2026-01-01" },
+      { title: "FÉRIÉ (Moselle) : Vendredi Saint", date: "2026-04-03" },
+      { title: "FÉRIÉ : Lundi de Pâques", date: "2026-04-06" },
+      { title: "FÉRIÉ : Fête du Travail", date: "2026-05-01" },
+      { title: "FÉRIÉ : Victoire 1945", date: "2026-05-08" },
+      { title: "FÉRIÉ : Ascension", date: "2026-05-14" },
+      { title: "FÉRIÉ : Lundi de Pentecôte", date: "2026-05-25" },
+      { title: "FÉRIÉ : Fête Nationale", date: "2026-07-14" },
+      { title: "FÉRIÉ : Assomption", date: "2026-08-15" },
+      { title: "FÉRIÉ : Toussaint", date: "2026-11-01" },
+      { title: "FÉRIÉ : Armistice 1918", date: "2026-11-11" },
+      { title: "FÉRIÉ : Noël", date: "2026-12-25" },
+      { title: "FÉRIÉ (Moselle) : Saint-Étienne", date: "2026-12-26" },
+      // Année 2027
+      { title: "FÉRIÉ : Jour de l'An", date: "2027-01-01" },
+      { title: "FÉRIÉ (Moselle) : Vendredi Saint", date: "2027-03-26" },
+      { title: "FÉRIÉ : Lundi de Pâques", date: "2027-03-29" },
+      { title: "FÉRIÉ : Fête du Travail", date: "2027-05-01" },
+      { title: "FÉRIÉ : Victoire 1945", date: "2027-05-08" },
+      { title: "FÉRIÉ : Ascension", date: "2027-05-06" },
+      { title: "FÉRIÉ : Lundi de Pentecôte", date: "2027-05-17" },
+      { title: "FÉRIÉ : Fête Nationale", date: "2027-07-14" },
+      { title: "FÉRIÉ : Assomption", date: "2027-08-15" },
+      { title: "FÉRIÉ : Toussaint", date: "2027-11-01" },
+      { title: "FÉRIÉ : Armistice 1918", date: "2027-11-11" },
+      { title: "FÉRIÉ : Noël", date: "2027-12-25" },
+      { title: "FÉRIÉ (Moselle) : Saint-Étienne", date: "2027-12-26" }
+    ];
+
+    const DATES_FERIEES_SET = new Set(FERIES_MOSELLE.map(f => f.date));
 
     const COULEURS = {
       'CONFLIT': '#d32f2f',
@@ -338,4 +353,212 @@
     const selectStatut = document.getElementById('form-statut');
     const inputDebut = document.getElementById('form-debut');
     const inputFin = document.getElementById('form-fin');
-    const btnSupprimer =
+    const btnSupprimer = document.getElementById('btn-supprimer');
+
+    function fermer() {
+      modalEl.style.display = 'none';
+      ligneSelectionneeId = null;
+      btnSupprimer.style.display = 'none';
+      if (calendar) calendar.unselect();
+    }
+
+    document.getElementById('btn-annuler').addEventListener('click', fermer);
+
+    btnSupprimer.addEventListener('click', async function() {
+      if (!ligneSelectionneeId) return;
+      if (confirm("Supprimer ce vœu de présence ?")) {
+        try {
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          fermer();
+          await toutCharger();
+        } catch(e) {
+          alert("Erreur lors de la suppression.");
+        }
+      }
+    });
+
+    function majSelectAgents() {
+      const choix = selectAgent.value;
+      selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
+
+      const vu = new Set();
+      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+      for (const [id, label] of liste) {
+        if (!vu.has(label)) {
+          vu.add(label);
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
+      if (choix && annuaireAgents.has(parseInt(choix, 10))) {
+        selectAgent.value = choix;
+      }
+    }
+
+    async function chargerAnnuaire() {
+      try {
+        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
+        if (t && t.id) {
+          annuaireAgents.clear();
+          for (let i = 0; i < t.id.length; i++) {
+            const rowId = t.id[i];
+            const nom = t.Nom ? (t.Nom[i] || '') : '';
+            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
+            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
+            const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
+            annuaireAgents.set(rowId, lib);
+          }
+          majSelectAgents();
+        }
+      } catch(e) {}
+    }
+
+    async function toutCharger() {
+      await chargerAnnuaire();
+
+      try {
+        const p = await grist.docApi.fetchTable('Presences');
+        if (p && p.id) {
+          const rows = [];
+          for (let i = 0; i < p.id.length; i++) {
+            rows.push({
+              id: p.id[i],
+              qui: p.qui ? p.qui[i] : null,
+              Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
+              Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
+              STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
+              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK')
+            });
+          }
+          cachePresences = rows;
+          afficherPresences(rows);
+          return;
+        }
+      } catch(e) {}
+
+      try {
+        const sel = await grist.docApi.fetchSelectedTable();
+        if (Array.isArray(sel) && sel.length > 0) {
+          cachePresences = sel;
+          afficherPresences(sel);
+        }
+      } catch(e2) {}
+    }
+
+    function afficherPresences(records) {
+      if (!records || !calendar) return;
+
+      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+      const valides = records.map(r => {
+        const debut = parseDate(r.Date_debut || r['Date début']);
+        const fin = parseDate(r.Date_fin || r['Date fin']) || debut;
+        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
+        const statut = String(r.STATUT || r.Statut || '').trim();
+        const conf = String(r.Statut_conflit || r.Statut2 || 'OK').trim();
+
+        return {
+          id: r.id,
+          agentId: isNaN(qId) ? null : qId,
+          nomAffiche: annuaireAgents.get(qId) || (r.Agent || `Agent #${qId}`),
+          debut: debut,
+          fin: fin,
+          statut: statut,
+          statutConflit: conf
+        };
+      }).filter(r => Boolean(r.debut));
+
+      const eventsPresences = valides.map((r, index, array) => {
+        const sNorm = r.statut.toUpperCase();
+        const confNorm = r.statutConflit.toUpperCase();
+
+        const doublonInterdit = array.some((autre, autreIdx) => {
+          if (index === autreIdx) return false;
+          if (!r.agentId || r.agentId !== autre.agentId) return false;
+
+          const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
+          if (!chevauche) return false;
+
+          const autreSNorm = autre.statut.toUpperCase();
+          const unAstreinte = sNorm.includes('ASTREINTE');
+          const autreAstreinte = autreSNorm.includes('ASTREINTE');
+
+          if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
+          if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
+
+          return true;
+        });
+
+        const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
+
+        let couleur = '#3788d8';
+        if (estEnConflit) {
+          couleur = COULEURS['CONFLIT'];
+        } else {
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (sNorm.includes(cle)) {
+              couleur = val;
+              break;
+            }
+          }
+        }
+
+        const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : (r.statut || 'PRESENCE');
+
+        return {
+          id: String(r.id),
+          title: `[${badgeTexte}] ${r.nomAffiche}`,
+          start: r.debut,
+          end: addDays(r.fin, 1),
+          backgroundColor: couleur,
+          borderColor: couleur,
+          allDay: true,
+          classNames: ["fc-event-presence"],
+          extendedProps: {
+            rowId: r.id,
+            agentId: r.agentId,
+            nomAgent: r.nomAffiche,
+            statutInitial: r.statut,
+            statutBadge: badgeTexte,
+            debutReel: r.debut,
+            finReelle: r.fin,
+            periodeTexte: `${r.debut} au ${r.fin}`,
+            estPresence: true
+          }
+        };
+      });
+
+      // Événements des jours fériés
+      const eventsFeries = FERIES_MOSELLE.map((f, i) => ({
+        id: `ferie-${i}`,
+        title: f.title,
+        start: f.date,
+        allDay: true,
+        classNames: ["fc-event-ferie"],
+        extendedProps: { estPresence: false }
+      }));
+
+      // Fusion globale
+      const tousLesEvents = [
+        ...VACANCES_ZONE_B,
+        ...eventsFeries,
+        ...eventsPresences
+      ];
+
+      calendar.removeAllEvents();
+      calendar.addEventSource(tousLesEvents);
+    }
+
+    document.getElementById('btn-valider').addEventListener('click', async function() {
+      const agentId = parseInt(selectAgent.value, 10);
+      const statut = selectStatut.value;
+      const debut = inputDebut.value;
+      const fin = inputFin.value;
+
+      if (isNaN(agentId) || !debut || !fin) {
+        alert("Veuillez sélectionner un membre de l'équipe et des dates valides.");
+        return;

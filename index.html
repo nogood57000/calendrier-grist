@@ -228,8 +228,8 @@
 
   <script>
     let calendar = null;
-    const annuaireAgents = new Map(); // id (string) -> libelle
-    let derniersRecords = [];
+    const annuaireAgents = new Map();
+    let cacheRecords = [];
     let ligneSelectionneeId = null;
 
     const COULEURS = {
@@ -268,17 +268,17 @@
       return d.toISOString().split('T')[0];
     }
 
-    function trouverValeur(row, clesCherchees) {
+    function trouverValeur(row, cles) {
       if (!row) return null;
-      for (const k of clesCherchees) {
+      for (const k of cles) {
         if (row[k] !== undefined && row[k] !== null) return row[k];
       }
-      const toutesLesCles = Object.keys(row);
-      for (const k of clesCherchees) {
-        const clean = k.toLowerCase().replace(/[^a-z0-9]/g, '');
-        for (const reelle of toutesLesCles) {
-          if (reelle.toLowerCase().replace(/[^a-z0-9]/g, '') === clean) {
-            if (row[reelle] !== undefined && row[reelle] !== null) return row[reelle];
+      const reelles = Object.keys(row);
+      for (const k of cles) {
+        const pur = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const r of reelles) {
+          if (r.toLowerCase().replace(/[^a-z0-9]/g, '') === pur) {
+            if (row[r] !== undefined && row[r] !== null) return row[r];
           }
         }
       }
@@ -333,36 +333,20 @@
       }
     }
 
-    async function tenterChargerAnnuaire() {
-      try {
-        const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
-        if (t && t.id) {
-          for (let i = 0; i < t.id.length; i++) {
-            const rowId = t.id[i];
-            const nom = t.Nom ? (t.Nom[i] || '') : '';
-            const prenom = t.Prenom ? (t.Prenom[i] || '') : '';
-            const fonc = t.Fonction ? (t.Fonction[i] || '') : '';
-            const lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim() || `Agent #${rowId}`;
-            annuaireAgents.set(String(rowId), lib);
-          }
-          majSelectAgents();
-        }
-      } catch(e) {}
-    }
-
     function traiterDonnees(records) {
       if (!records || !calendar) return;
 
-      // Extraire les noms des agents depuis les colonnes visibles de chaque ligne
+      // Enregistrement des agents présents dans les données
       records.forEach(r => {
-        const rawAgent = trouverValeur(r, ['Agent', 'qui', 'qui_Agent', 'qui.Agent']);
-        const rawId = (r.qui && typeof r.qui === 'number') ? r.qui : r.id;
-
-        if (typeof rawAgent === 'string' && rawAgent.trim() && !rawAgent.startsWith('#')) {
-          annuaireAgents.set(rawAgent.trim(), rawAgent.trim());
-          if (r.qui && typeof r.qui === 'number') {
-            annuaireAgents.set(String(r.qui), rawAgent.trim());
-          }
+        const q = trouverValeur(r, ['Agent', 'qui']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
+        if (typeof q === 'number') {
+          const nom = (typeof txt === 'string' && !/^\d+$/.test(txt.trim())) ? txt.trim() : `Agent #${q}`;
+          annuaireAgents.set(String(q), nom);
+        } else if (typeof q === 'string' && q.trim()) {
+          annuaireAgents.set(q.trim(), q.trim());
+        } else if (q && typeof q === 'object' && q.id) {
+          annuaireAgents.set(String(q.id), q.Identite || `Agent #${q.id}`);
         }
       });
       majSelectAgents();
@@ -385,6 +369,9 @@
         } else if (typeof agentVal === 'number') {
           agentCle = String(agentVal);
           agentNom = annuaireAgents.get(agentCle) || `Agent #${agentVal}`;
+        } else if (agentVal && typeof agentVal === 'object' && agentVal.id) {
+          agentCle = String(agentVal.id);
+          agentNom = agentVal.Identite || annuaireAgents.get(agentCle) || `Agent #${agentVal.id}`;
         }
 
         return {
@@ -398,7 +385,6 @@
         };
       }).filter(r => Boolean(r.debut));
 
-      // Détection de conflit
       const events = valides.map((r, index, array) => {
         const sNorm = r.statut.toUpperCase();
         const confNorm = r.statutConflit.toUpperCase();
@@ -461,7 +447,6 @@
       calendar.addEventSource(events);
     }
 
-    // Enregistrement
     document.getElementById('btn-valider').addEventListener('click', async function() {
       const agentVal = selectAgent.value;
       const statut = selectStatut.value;
@@ -476,29 +461,17 @@
       const agentNum = parseInt(agentVal, 10);
       const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
-      // Essayer avec les noms exacts de vos colonnes
-      const fields = {
-        "Date début": debut,
-        "Date fin": fin,
-        "Agent": refAgent,
-        "STATUT": statut
-      };
+      const fieldsIso = { "Date début": debut, "Date fin": fin, "Agent": refAgent, "STATUT": statut };
+      const fieldsAlt = { "Date_debut": debut, "Date_fin": fin, "qui": refAgent, "STATUT": statut };
 
       try {
         if (ligneSelectionneeId) {
-          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fields });
+          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
         } else {
-          await grist.selectedTable.create({ fields: fields });
+          await grist.selectedTable.create({ fields: fieldsIso });
         }
         fermer();
       } catch(e) {
-        // Variante interne
-        const fieldsAlt = {
-          "Date_debut": debut,
-          "Date_fin": fin,
-          "qui": refAgent,
-          "STATUT": statut
-        };
         try {
           if (ligneSelectionneeId) {
             await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsAlt });
@@ -577,21 +550,19 @@
 
       calendar.render();
 
-      // Démarrage Grist
-      try {
-        grist.ready({ requiredAccess: 'full' });
-      } catch(e) {
-        grist.ready();
-      }
-
-      tenterChargerAnnuaire();
+      grist.ready();
 
       grist.onRecords(function(records) {
         if (records && records.length > 0) {
-          derniersRecords = records;
-          traiterDonnees(records);
-        } else if (derniersRecords.length > 0) {
-          traiterDonnees(derniersRecords);
+          const aDesDonnees = records.some(r => trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']) !== null);
+          if (aDesDonnees) {
+            cacheRecords = records;
+            traiterDonnees(records);
+          } else if (cacheRecords.length > 0) {
+            traiterDonnees(cacheRecords);
+          }
+        } else if (cacheRecords.length > 0) {
+          traiterDonnees(cacheRecords);
         }
       });
     }

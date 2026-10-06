@@ -62,14 +62,14 @@
       height: 100%;
     }
 
-    /* COLORIS WEEK-ENDS ET JOURS FÉRIÉS (MOSELLE) */
+    /* WEEK-ENDS ET JOURS FÉRIÉS (MOSELLE) */
     .fc-day-sat, 
     .fc-day-sun, 
     .cellule-ferie-moselle {
       background-color: #f1f5f9 !important;
     }
 
-    /* COLORIS VACANCES SCOLAIRES ZONE B */
+    /* VACANCES SCOLAIRES ZONE B */
     .cellule-vacances-zone-b {
       background-color: #f0f9ff !important;
     }
@@ -103,15 +103,15 @@
       display: inline-block;
     }
 
-    /* --- PLAGES HORAIRES GRAND FORMAT ET HAUTE LISIBILITÉ --- */
+    /* BANDEAUX ÉPAIS ET GRANDE POLICE */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
       white-space: normal !important;
-      min-height: 46px !important;            /* Épaisseur nettement augmentée */
+      min-height: 44px !important;            /* Épaisseur marquée */
       margin-top: 2px !important;
-      margin-bottom: 4px !important;           /* Séparation nette entre barres */
-      border-radius: 6px !important;
+      margin-bottom: 4px !important;
+      border-radius: 5px !important;
       border: none !important;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
       cursor: pointer;
@@ -132,7 +132,7 @@
 
     .event-ligne-statut {
       display: inline-block;
-      font-size: 11px;                         /* Statut plus grand */
+      font-size: 11px;                         /* Badge statut */
       font-weight: 900;
       letter-spacing: 0.4px;
       text-transform: uppercase;
@@ -142,19 +142,19 @@
     }
 
     .event-ligne-nom {
-      font-size: 13.5px;                       /* Nom grand et net */
+      font-size: 13.5px;                       /* Nom agent grand et net */
       font-weight: 700;
       word-break: break-word;
     }
 
-    /* Contraste optimal selon la couleur du fond */
+    /* Contraste automatique : texte noir sur jaune congés, blanc sur fonds sombres */
     .theme-sombre .event-ligne-statut {
       background: rgba(0, 0, 0, 0.18);
       color: #0f172a;
       border: 1px solid rgba(0, 0, 0, 0.2);
     }
     .theme-sombre .event-ligne-nom {
-      color: #0f172a;                          /* Texte noir foncé sur jaune Congés */
+      color: #0f172a;                          /* Lisibilité maximale sur jaune */
       font-weight: 800;
     }
 
@@ -163,7 +163,7 @@
       color: #ffffff;
     }
     .theme-clair .event-ligne-nom {
-      color: #ffffff;                          /* Texte blanc net sur fonds colorés */
+      color: #ffffff;
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
 
@@ -303,10 +303,8 @@
   <script>
     let calendar = null;
     const annuaireAgents = new Map();
-    let memoireDerniersRecords = [];
     let ligneSelectionneeId = null;
 
-    // 1. Vacances scolaires Zone B (Académie Nancy-Metz)
     const PLAGES_VACANCES_ZONE_B = [
       { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
       { debut: "2026-12-19", fin: "2027-01-03", nom: "Noël" },
@@ -323,9 +321,7 @@
       return null;
     }
 
-    // 2. Fériés officiels + spécifiques Alsace-Moselle
     const DICT_FERIES_MOSELLE = {
-      // 2026
       "2026-01-01": "Jour de l'An",
       "2026-04-03": "Vendredi Saint (Moselle)",
       "2026-04-06": "Lundi de Pâques",
@@ -339,7 +335,6 @@
       "2026-11-11": "Armistice 1918",
       "2026-12-25": "Noël",
       "2026-12-26": "Saint-Étienne (Moselle)",
-      // 2027
       "2027-01-01": "Jour de l'An",
       "2027-03-26": "Vendredi Saint (Moselle)",
       "2027-03-29": "Lundi de Pâques",
@@ -436,13 +431,12 @@
       if (!ligneSelectionneeId) return;
       if (confirm("Supprimer ce vœu de présence ?")) {
         try {
-          await grist.selectedTable.destroy([ligneSelectionneeId]);
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          fermer();
+          await toutRecharger();
         } catch(e) {
-          try {
-            await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
-          } catch(e2) {}
+          alert("Erreur lors de la suppression.");
         }
-        fermer();
       }
     });
 
@@ -468,10 +462,11 @@
       }
     }
 
-    async function chargerAnnuaireOptionnel() {
+    async function chargerAnnuaire() {
       try {
         const t = await grist.docApi.fetchTable('Equipe_en_DTPJJ_de_Moselle');
         if (t && t.id) {
+          annuaireAgents.clear();
           for (let i = 0; i < t.id.length; i++) {
             const rowId = t.id[i];
             const nom = t.Nom ? (t.Nom[i] || '') : '';
@@ -485,10 +480,40 @@
       } catch(e) {}
     }
 
-    function traiterEtAfficher(records) {
+    // Chargement autonome direct depuis la base de données
+    async function toutRecharger() {
+      await chargerAnnuaire();
+
+      try {
+        const p = await grist.docApi.fetchTable('Presences');
+        if (p && p.id && p.id.length > 0) {
+          const rows = [];
+          for (let i = 0; i < p.id.length; i++) {
+            rows.push({
+              id: p.id[i],
+              qui: p.qui ? p.qui[i] : null,
+              Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
+              Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
+              STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
+              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK')
+            });
+          }
+          afficherRecords(rows);
+          return;
+        }
+      } catch(e) {}
+
+      try {
+        const sel = await grist.docApi.fetchSelectedTable();
+        if (Array.isArray(sel) && sel.length > 0) {
+          afficherRecords(sel);
+        }
+      } catch(e2) {}
+    }
+
+    function afficherRecords(records) {
       if (!records || !calendar) return;
 
-      // Nettoyage de #NaN
       records.forEach(r => {
         const q = trouverValeur(r, ['Agent', 'qui']);
         const txt = trouverValeur(r, ['Agent', 'Identite']);
@@ -497,9 +522,6 @@
           annuaireAgents.set(q, nom);
         } else if (typeof q === 'string' && q.trim() && !q.includes('NaN')) {
           annuaireAgents.set(q.trim(), q.trim());
-        } else if (q && typeof q === 'object' && q.id) {
-          const nom = (q.Identite && !q.Identite.includes('NaN')) ? q.Identite : `Agent #${q.id}`;
-          annuaireAgents.set(q.id, nom);
         }
       });
       majSelectAgents();
@@ -521,12 +543,8 @@
         } else if (typeof q === 'string' && q.trim()) {
           agentCle = q.trim();
           nomAffiche = annuaireAgents.get(agentCle) || agentCle;
-        } else if (q && typeof q === 'object' && q.id) {
-          agentCle = String(q.id);
-          nomAffiche = q.Identite || annuaireAgents.get(q.id) || `Agent #${q.id}`;
         }
 
-        // Nettoyage
         nomAffiche = String(nomAffiche).replace(/Agent #NaN/g, 'Collaborateur').replace(/#NaN/g, '').trim() || 'Collaborateur';
 
         const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
@@ -575,7 +593,7 @@
           for (const [cle, val] of Object.entries(COULEURS)) {
             if (sNorm.includes(cle)) {
               couleur = val;
-              if (cle.includes('CONG')) estJaune = true; // Jaune Congés
+              if (cle.includes('CONG')) estJaune = true;
               break;
             }
           }
@@ -623,27 +641,20 @@
       const agentNum = parseInt(agentVal, 10);
       const refAgent = isNaN(agentNum) ? agentVal : agentNum;
 
-      const fieldsIso = { "Date début": debut, "Date fin": fin, "Agent": refAgent, "STATUT": statut };
-      const fieldsAlt = { "Date_debut": debut, "Date_fin": fin, "qui": refAgent, "STATUT": statut };
+      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+      const champsRecord = { qui: refAgent, STATUT: statut, Date_debut: tsDebut, Date_fin: tsFin };
 
       try {
         if (ligneSelectionneeId) {
-          await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsIso });
+          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, champsRecord]]);
         } else {
-          await grist.selectedTable.create({ fields: fieldsIso });
+          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, champsRecord]]);
         }
         fermer();
+        await toutRecharger();
       } catch(e) {
-        try {
-          if (ligneSelectionneeId) {
-            await grist.selectedTable.update({ id: ligneSelectionneeId, fields: fieldsAlt });
-          } else {
-            await grist.selectedTable.create({ fields: fieldsAlt });
-          }
-          fermer();
-        } catch(e2) {
-          alert("Erreur lors de l'enregistrement dans Grist.");
-        }
+        alert("Erreur lors de l'enregistrement dans Grist.");
       }
     });
 
@@ -665,21 +676,14 @@
           week: 'Semaine'
         },
 
-        // Coloration : Week-ends, Fériés Moselle et Vacances Zone B
         dayCellClassNames: function(arg) {
           const classes = [];
           const dStr = formatIsoDateLocal(arg.date);
-
-          if (DICT_FERIES_MOSELLE[dStr]) {
-            classes.push('cellule-ferie-moselle');
-          }
-          if (estJourVacances(dStr)) {
-            classes.push('cellule-vacances-zone-b');
-          }
+          if (DICT_FERIES_MOSELLE[dStr]) classes.push('cellule-ferie-moselle');
+          if (estJourVacances(dStr)) classes.push('cellule-vacances-zone-b');
           return classes;
         },
 
-        // En-tête des cellules
         dayCellContent: function(arg) {
           const dStr = formatIsoDateLocal(arg.date);
           const div = document.createElement('div');
@@ -712,7 +716,6 @@
           return { domNodes: [div] };
         },
 
-        // Événements : grand format, double-ligne aérée, contraste adapté
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
           const nom = arg.event.extendedProps.nomAgent || arg.event.title;
@@ -766,18 +769,22 @@
 
       calendar.render();
 
-      grist.ready();
+      grist.ready({ requiredAccess: 'full' });
 
-      chargerAnnuaireOptionnel();
+      toutRecharger();
 
       grist.onRecords(function(records) {
         if (records && records.length > 0) {
-          memoireDerniersRecords = records;
-          traiterEtAfficher(records);
-        } else if (memoireDerniersRecords.length > 0) {
-          traiterEtAfficher(memoireDerniersRecords);
+          const aDesDates = records.some(r => trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']) !== null);
+          if (aDesDates) {
+            afficherRecords(records);
+            return;
+          }
         }
+        toutRecharger();
       });
+
+      window.addEventListener('focus', toutRecharger);
     }
 
     if (document.readyState === 'loading') {

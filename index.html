@@ -22,8 +22,8 @@
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 16px;
-      padding: 10px 18px;
+      gap: 14px;
+      padding: 10px 16px;
       background: #f8fafc;
       border-bottom: 2px solid #e2e8f0;
       font-size: 13px;
@@ -33,14 +33,14 @@
     .item-legende {
       display: inline-flex;
       align-items: center;
-      gap: 8px;
+      gap: 7px;
     }
     .pastille {
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
       border-radius: 4px;
       display: inline-block;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.2);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.18);
     }
     .pastille-vacances {
       background: #bae6fd;
@@ -85,8 +85,8 @@
       font-weight: 800;
       color: #b91c1c;
       background: #fee2e2;
-      padding: 2px 6px;
-      border-radius: 4px;
+      padding: 2px 5px;
+      border-radius: 3px;
       margin-left: 4px;
       display: inline-block;
       border: 1px solid #fca5a5;
@@ -97,26 +97,20 @@
       font-weight: 700;
       color: #0369a1;
       background: #e0f2fe;
-      padding: 2px 5px;
+      padding: 2px 4px;
       border-radius: 3px;
       margin-left: 3px;
       display: inline-block;
     }
 
-    /* --- HAUTE LISIBILITÉ DES BANDEAUX (FORCÉE ET INDÉPENDANTE) --- */
-    .fc .fc-daygrid-body {
-      min-height: 100% !important;
-    }
-    .fc .fc-daygrid-day-frame {
-      min-height: 140px !important; /* Laisse de la place aux cellules */
-    }
-
+    /* --- PLAGES HORAIRES GRAND FORMAT ET HAUTE LISIBILITÉ --- */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
-      height: 38px !important;            /* Épaisseur réelle et constante */
-      min-height: 38px !important;
-      margin-bottom: 5px !important;       /* Écart net entre personnes */
+      white-space: normal !important;
+      min-height: 46px !important;            /* Épaisseur nettement augmentée */
+      margin-top: 2px !important;
+      margin-bottom: 4px !important;           /* Séparation nette entre barres */
       border-radius: 6px !important;
       border: none !important;
       box-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
@@ -124,60 +118,56 @@
     }
 
     .fc-event-main {
-      height: 100% !important;
-      padding: 0 8px !important;
-      display: flex !important;
-      align-items: center !important;
+      padding: 3px 7px !important;
+      white-space: normal !important;
     }
 
-    .event-ligne-unique {
+    .event-card {
       display: flex;
-      align-items: center;
-      gap: 8px;
-      width: 100%;
-      overflow: hidden;
-      white-space: nowrap;
+      flex-direction: column;
+      gap: 2px;
+      line-height: 1.25;
+      text-align: left;
     }
 
-    .event-badge-statut {
-      font-size: 11px;
+    .event-ligne-statut {
+      display: inline-block;
+      font-size: 11px;                         /* Statut plus grand */
       font-weight: 900;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
       text-transform: uppercase;
-      padding: 2px 6px;
-      border-radius: 4px;
-      flex-shrink: 0;
+      padding: 1px 5px;
+      border-radius: 3px;
+      width: fit-content;
     }
 
-    .event-nom-agent {
-      font-size: 14.5px;                  /* Grand texte bien lisible */
+    .event-ligne-nom {
+      font-size: 13.5px;                       /* Nom grand et net */
       font-weight: 700;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      word-break: break-word;
     }
 
-    /* Contraste automatique selon le fond */
-    .theme-texte-clair .event-badge-statut {
-      background: rgba(0, 0, 0, 0.3);
-      color: #ffffff;
-    }
-    .theme-texte-clair .event-nom-agent {
-      color: #ffffff;
-      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-    }
-
-    .theme-texte-sombre .event-badge-statut {
-      background: rgba(0, 0, 0, 0.15);
-      color: #1c1917;
+    /* Contraste optimal selon la couleur du fond */
+    .theme-sombre .event-ligne-statut {
+      background: rgba(0, 0, 0, 0.18);
+      color: #0f172a;
       border: 1px solid rgba(0, 0, 0, 0.2);
     }
-    .theme-texte-sombre .event-nom-agent {
-      color: #1c1917;                   /* Noir profond très net sur fond jaune */
+    .theme-sombre .event-ligne-nom {
+      color: #0f172a;                          /* Texte noir foncé sur jaune Congés */
       font-weight: 800;
     }
 
-    /* FORMULAIRE MODAL */
+    .theme-clair .event-ligne-statut {
+      background: rgba(0, 0, 0, 0.25);
+      color: #ffffff;
+    }
+    .theme-clair .event-ligne-nom {
+      color: #ffffff;                          /* Texte blanc net sur fonds colorés */
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    }
+
+    /* MODAL */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -191,7 +181,7 @@
       background: #ffffff;
       padding: 24px;
       border-radius: 10px;
-      width: 350px;
+      width: 340px;
       box-shadow: 0 15px 35px rgba(0, 0, 0, 0.3);
     }
     .conteneur-formulaire h3 {
@@ -316,7 +306,7 @@
     let memoireDerniersRecords = [];
     let ligneSelectionneeId = null;
 
-    // 1. Vacances scolaires Zone B (Académie Nancy-Metz) 2026-2027
+    // 1. Vacances scolaires Zone B (Académie Nancy-Metz)
     const PLAGES_VACANCES_ZONE_B = [
       { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
       { debut: "2026-12-19", fin: "2027-01-03", nom: "Noël" },
@@ -498,7 +488,7 @@
     function traiterEtAfficher(records) {
       if (!records || !calendar) return;
 
-      // Découverte des noms avec suppression définitive de '#NaN'
+      // Nettoyage de #NaN
       records.forEach(r => {
         const q = trouverValeur(r, ['Agent', 'qui']);
         const txt = trouverValeur(r, ['Agent', 'Identite']);
@@ -536,8 +526,8 @@
           nomAffiche = q.Identite || annuaireAgents.get(q.id) || `Agent #${q.id}`;
         }
 
-        // Nettoyage absolu du label
-        nomAffiche = nomAffiche.replace(/Agent #NaN/g, 'Collaborateur').replace(/#NaN/g, '').trim();
+        // Nettoyage
+        nomAffiche = String(nomAffiche).replace(/Agent #NaN/g, 'Collaborateur').replace(/#NaN/g, '').trim() || 'Collaborateur';
 
         const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
         const conf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
@@ -577,7 +567,7 @@
         const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
 
         let couleur = '#1976d2';
-        let estFondClair = false;
+        let estJaune = false;
 
         if (estEnConflit) {
           couleur = COULEURS['CONFLIT'];
@@ -585,7 +575,7 @@
           for (const [cle, val] of Object.entries(COULEURS)) {
             if (sNorm.includes(cle)) {
               couleur = val;
-              if (cle.includes('CONG')) estFondClair = true; // Jaune Congés
+              if (cle.includes('CONG')) estJaune = true; // Jaune Congés
               break;
             }
           }
@@ -609,7 +599,7 @@
             statutBadge: badgeTexte,
             debutReel: r.debut,
             finReelle: r.fin,
-            estFondClair: estFondClair,
+            estJaune: estJaune,
             periodeTexte: `${r.debut} au ${r.fin}`
           }
         };
@@ -675,6 +665,7 @@
           week: 'Semaine'
         },
 
+        // Coloration : Week-ends, Fériés Moselle et Vacances Zone B
         dayCellClassNames: function(arg) {
           const classes = [];
           const dStr = formatIsoDateLocal(arg.date);
@@ -688,18 +679,17 @@
           return classes;
         },
 
+        // En-tête des cellules
         dayCellContent: function(arg) {
           const dStr = formatIsoDateLocal(arg.date);
           const div = document.createElement('div');
           div.style.display = 'flex';
           div.style.alignItems = 'center';
           div.style.justifyContent = 'space-between';
-          div.style.padding = '3px 6px';
+          div.style.padding = '2px 4px';
 
           const spanNum = document.createElement('span');
           spanNum.textContent = arg.dayNumberText;
-          spanNum.style.fontWeight = "700";
-          spanNum.style.fontSize = "13px";
           div.appendChild(spanNum);
 
           const nomFerie = DICT_FERIES_MOSELLE[dStr];
@@ -722,19 +712,19 @@
           return { domNodes: [div] };
         },
 
-        // RENDU HAUTE LISIBILITÉ EN 1 LIGNE AVEC CONTRASTE DYNAMIQUE
+        // Événements : grand format, double-ligne aérée, contraste adapté
         eventContent: function(arg) {
           const badge = arg.event.extendedProps.statutBadge || '';
           const nom = arg.event.extendedProps.nomAgent || arg.event.title;
-          const estFondClair = arg.event.extendedProps.estFondClair;
+          const estJaune = arg.event.extendedProps.estJaune;
 
           const conteneur = document.createElement('div');
-          conteneur.className = `event-ligne-unique ${estFondClair ? 'theme-texte-sombre' : 'theme-texte-clair'}`;
+          conteneur.className = `event-card ${estJaune ? 'theme-sombre' : 'theme-clair'}`;
           conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
 
           conteneur.innerHTML = `
-            <span class="event-badge-statut">${badge}</span>
-            <span class="event-nom-agent">${nom}</span>
+            <div><span class="event-ligne-statut">${badge}</span></div>
+            <div class="event-ligne-nom">${nom}</div>
           `;
           return { domNodes: [conteneur] };
         },

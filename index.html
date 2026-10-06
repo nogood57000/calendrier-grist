@@ -314,7 +314,9 @@
         try {
           await grist.selectedTable.destroy([ligneSelectionneeId]);
         } catch(e) {
-          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          try {
+            await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          } catch(e2) {}
         }
         fermer();
       }
@@ -337,7 +339,6 @@
       }
     }
 
-    // Charger les agents depuis le stockage local dès la première milliseconde
     function chargerAgentsDepuisCache() {
       try {
         const brut = localStorage.getItem(CLE_STOCKAGE_AGENTS);
@@ -379,12 +380,19 @@
     function afficherDonnees(records) {
       if (!records || records.length === 0) return;
 
-      // Sauvegarde immédiate dans le stockage persistant du navigateur
+      // VERROU DE SÉCURITÉ : Ne rien effacer si Grist a envoyé des lignes sans colonnes de date !
+      const aDesDates = records.some(r => parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut', 'DateDebut'])) !== null);
+      if (!aDesDates) {
+        restaurerDepuisCache();
+        return;
+      }
+
+      // Sauvegarde uniquement si les données sont réelles et complètes
       try {
         localStorage.setItem(CLE_STOCKAGE_EVENTS, JSON.stringify(records));
       } catch(e) {}
 
-      // Extraire les noms des agents
+      // Extraction des identités
       records.forEach(r => {
         const q = getVal(r, ['qui', 'Agent', 'agent']);
         const txt = getVal(r, ['Agent', 'Identite', 'nom', 'qui']);
@@ -495,14 +503,16 @@
       calendar.addEventSource(events);
     }
 
-    // Restaurer immédiatement les données sauvées lors de la destruction de l'iframe
     function restaurerDepuisCache() {
       try {
         const stocke = localStorage.getItem(CLE_STOCKAGE_EVENTS);
         if (stocke) {
           const data = JSON.parse(stocke);
           if (Array.isArray(data) && data.length > 0) {
-            afficherDonnees(data);
+            const valides = data.filter(r => parseDateStr(getVal(r, ['Date_debut', 'Date début', 'date_debut'])) !== null);
+            if (valides.length > 0) {
+              afficherDonnees(valides);
+            }
           }
         }
       } catch(e) {}
@@ -586,79 +596,4 @@
           
           const conteneur = document.createElement('div');
           conteneur.className = 'event-card';
-          conteneur.title = `${nom}\nStatut : ${badge}\nPériode : ${arg.event.extendedProps.periodeTexte || ''}\n(Cliquez pour modifier ou supprimer)`;
-
-          conteneur.innerHTML = `
-            <div><span class="event-ligne-statut">${badge}</span></div>
-            <div class="event-ligne-nom">${nom}</div>
-          `;
-          return { domNodes: [conteneur] };
-        },
-
-        select: function(info) {
-          ligneSelectionneeId = null;
-          titreModal.textContent = "Nouveau vœu de présence";
-          btnSupprimer.style.display = "none";
-
-          inputDebut.value = info.startStr;
-          const finCalculee = new Date(info.endStr);
-          finCalculee.setDate(finCalculee.getDate() - 1);
-          inputFin.value = finCalculee.toISOString().split('T')[0];
-
-          majSelectAgents();
-          modalEl.style.display = 'flex';
-        },
-
-        eventClick: function(info) {
-          const props = info.event.extendedProps;
-          ligneSelectionneeId = props.rowId;
-
-          titreModal.textContent = "Modifier la présence";
-          btnSupprimer.style.display = "inline-block";
-
-          inputDebut.value = props.debutReel;
-          inputFin.value = props.finReelle;
-
-          majSelectAgents();
-
-          if (props.agentCle && annuaireAgents.has(props.agentCle)) {
-            selectAgent.value = props.agentCle;
-          }
-
-          const sInit = normaliser(props.statutInitial);
-          for (let opt of selectStatut.options) {
-            if (sInit.includes(opt.value)) {
-              selectStatut.value = opt.value;
-              break;
-            }
-          }
-
-          modalEl.style.display = 'flex';
-        },
-
-        events: []
-      });
-
-      calendar.render();
-
-      // 1. Restaurer instantanément les événements et les agents dès l'ouverture
-      chargerAgentsDepuisCache();
-      restaurerDepuisCache();
-
-      // 2. Démarrer la liaison Grist
-      grist.ready();
-      tenterChargerTableEquipe();
-
-      // 3. Réception des données réelles depuis Grist
-      grist.onRecords(function(records) {
-        if (records && records.length > 0) {
-          afficherDonnees(records);
-        } else {
-          // Si Grist envoie une liste vide au rechargement de page, NE RIEN EFFACER et garder le cache
-          restaurerDepuisCache();
-        }
-      });
-    });
-  </script>
-</body>
-</html>
+          conteneur.title

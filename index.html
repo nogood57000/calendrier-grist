@@ -117,12 +117,12 @@
       cursor: pointer;
     }
 
-    /* Stylisation des demi-journées */
+    /* Différenciation visuelle des demi-journées */
     .event-demi-matin {
-      border-left: 6px solid #fde047 !important; /* Liseré clair rappelant le matin */
+      border-left: 7px solid #fde047 !important; /* Liseré clair Matin */
     }
     .event-demi-aprem {
-      border-left: 6px solid #1e293b !important; /* Liseré sombre rappelant l'après-midi */
+      border-left: 7px solid #0f172a !important; /* Liseré sombre Après-midi */
     }
 
     .fc-event-main {
@@ -206,7 +206,7 @@
       margin-bottom: 5px;
       color: #334155;
     }
-    .champ input, .champ select {
+    .champ input[type="date"], .champ select {
       width: 100%;
       padding: 8px 10px;
       border: 1px solid #cbd5e1;
@@ -215,6 +215,31 @@
       font-size: 14px;
       background: #ffffff;
     }
+
+    /* Style des coches Matin / Après-midi */
+    .groupe-coches {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 6px 0;
+    }
+    .label-coche {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      cursor: pointer;
+      margin-bottom: 0 !important;
+      color: #1e293b;
+    }
+    .label-coche input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      cursor: pointer;
+      accent-color: #0284c7;
+    }
+
     .barre-boutons {
       display: flex;
       justify-content: space-between;
@@ -261,7 +286,7 @@
       border-color: #0369a1 !important;
     }
 
-    /* IMPRESSION A4 PAYSAGE SANS COUPURE */
+    /* IMPRESSION A4 */
     @media print {
       @page {
         size: A4 landscape;
@@ -405,14 +430,17 @@
         <input type="date" id="form-fin" />
       </div>
 
-      <!-- SÉLECTION DU CRÉNEAU (MATIN / APRÈS-MIDI) -->
-      <div class="champ" id="conteneur-creneau">
-        <label for="form-creneau">Plage horaire</label>
-        <select id="form-creneau">
-          <option value="Journée">Journée entière</option>
-          <option value="Matin">Matin</option>
-          <option value="Après-midi">Après-midi</option>
-        </select>
+      <!-- COCHES POUR LA DEMI-JOURNÉE -->
+      <div class="champ" id="conteneur-coches-creneau">
+        <label>Créneau sélectionné</label>
+        <div class="groupe-coches">
+          <label class="label-coche">
+            <input type="checkbox" id="coche-matin" checked /> Matin
+          </label>
+          <label class="label-coche">
+            <input type="checkbox" id="coche-aprem" checked /> Après-midi
+          </label>
+        </div>
       </div>
 
       <div class="barre-boutons">
@@ -543,19 +571,43 @@
     const selectStatut = document.getElementById('form-statut');
     const inputDebut = document.getElementById('form-debut');
     const inputFin = document.getElementById('form-fin');
-    const conteneurCreneau = document.getElementById('conteneur-creneau');
-    const selectCreneau = document.getElementById('form-creneau');
+    const conteneurCoches = document.getElementById('conteneur-coches-creneau');
+    const cocheMatin = document.getElementById('coche-matin');
+    const cocheAprem = document.getElementById('coche-aprem');
     const btnSupprimer = document.getElementById('btn-supprimer');
 
-    // Masquage automatique du créneau pour l'astreinte
+    // Masquage automatique pour les astreintes
     selectStatut.addEventListener('change', function() {
       if (this.value === 'ASTREINTE') {
-        conteneurCreneau.style.display = 'none';
-        selectCreneau.value = 'Journée';
+        conteneurCoches.style.display = 'none';
+        cocheMatin.checked = true;
+        cocheAprem.checked = true;
       } else {
-        conteneurCreneau.style.display = 'block';
+        conteneurCoches.style.display = 'block';
       }
     });
+
+    function determinerTexteCreneau() {
+      if (selectStatut.value === 'ASTREINTE') return 'Journée';
+      if (cocheMatin.checked && cocheAprem.checked) return 'Journée';
+      if (cocheMatin.checked) return 'Matin';
+      if (cocheAprem.checked) return 'Après-midi';
+      return 'Journée';
+    }
+
+    function appliquerCochesDepuisTexte(val) {
+      const v = String(val || '').toLowerCase();
+      if (v.includes('matin') && !v.includes('apr')) {
+        cocheMatin.checked = true;
+        cocheAprem.checked = false;
+      } else if (v.includes('apr')) {
+        cocheMatin.checked = false;
+        cocheAprem.checked = true;
+      } else {
+        cocheMatin.checked = true;
+        cocheAprem.checked = true;
+      }
+    }
 
     function fermer() {
       modalEl.style.display = 'none';
@@ -757,11 +809,10 @@
           const unAstreinte = sNorm.includes('ASTREINTE');
           const autreAstreinte = autreSNorm.includes('ASTREINTE');
 
-          // Tolérance 1 : Astreinte autorisée avec présence
           if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
           if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
 
-          // Tolérance 2 : Matin vs Après-midi ne sont pas en conflit
+          // Pas de conflit si l'un est le matin et l'autre l'après-midi
           const rEstMatin = r.creneau.toLowerCase().includes('matin');
           const rEstAprem = r.creneau.toLowerCase().includes('apr');
           const autreEstMatin = autre.creneau.toLowerCase().includes('matin');
@@ -789,7 +840,7 @@
           }
         }
 
-        // Mention du créneau dans le badge
+        // Intégration du créneau dans le badge
         let libelleCreneau = '';
         let classeDemi = '';
         if (sNorm.includes('ASTREINTE')) {
@@ -837,10 +888,15 @@
       const statut = selectStatut.value;
       const debut = inputDebut.value;
       const fin = inputFin.value;
-      const creneau = (statut === 'ASTREINTE') ? 'Journée' : selectCreneau.value;
+      const creneau = determinerTexteCreneau();
 
       if (!agentVal || !debut || !fin) {
         alert("Veuillez sélectionner un membre et des dates valides.");
+        return;
+      }
+
+      if (!cocheMatin.checked && !cocheAprem.checked && statut !== 'ASTREINTE') {
+        alert("Veuillez cocher au moins une plage (Matin et/ou Après-midi).");
         return;
       }
 
@@ -872,7 +928,6 @@
         fermer();
         await toutRecharger();
       } catch(e) {
-        // En cas de champ Creneau manquant dans la table
         delete champsRecord.Creneau;
         try {
           if (ligneSelectionneeId) {
@@ -978,8 +1033,9 @@
           const f = new Date(info.endStr);
           f.setDate(f.getDate() - 1);
           inputFin.value = formatIsoDateLocal(f);
-          selectCreneau.value = "Journée";
-          conteneurCreneau.style.display = (selectStatut.value === 'ASTREINTE') ? 'none' : 'block';
+          cocheMatin.checked = true;
+          cocheAprem.checked = true;
+          conteneurCoches.style.display = (selectStatut.value === 'ASTREINTE') ? 'none' : 'block';
           majSelectAgents();
           modalEl.style.display = 'flex';
         },
@@ -1003,10 +1059,10 @@
             }
           }
           if (sInit.includes('ASTREINTE')) {
-            conteneurCreneau.style.display = 'none';
+            conteneurCoches.style.display = 'none';
           } else {
-            conteneurCreneau.style.display = 'block';
-            selectCreneau.value = props.creneauInitial || 'Journée';
+            conteneurCoches.style.display = 'block';
+            appliquerCochesDepuisTexte(props.creneauInitial);
           }
           modalEl.style.display = 'flex';
         },

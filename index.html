@@ -117,12 +117,11 @@
       cursor: pointer;
     }
 
-    /* Différenciation visuelle des demi-journées */
     .event-demi-matin {
-      border-left: 7px solid #facc15 !important; /* Liseré soleil matin */
+      border-left: 7px solid #facc15 !important;
     }
     .event-demi-aprem {
-      border-left: 7px solid #0f172a !important; /* Liseré sombre après-midi */
+      border-left: 7px solid #0f172a !important;
     }
 
     .fc-event-main {
@@ -141,7 +140,7 @@
     .event-ligne-top {
       display: flex;
       align-items: center;
-      gap: 5px;
+      gap: 6px;
     }
 
     .event-ligne-statut {
@@ -155,14 +154,9 @@
       width: fit-content;
     }
 
-    /* Pastille pictogramme créneau */
-    .picto-creneau {
-      font-size: 11px;
-      background: rgba(255, 255, 255, 0.3);
-      padding: 0 4px;
-      border-radius: 3px;
-      display: inline-flex;
-      align-items: center;
+    .event-picto {
+      font-size: 12px;
+      line-height: 1;
     }
 
     .event-ligne-nom {
@@ -215,3 +209,917 @@
     .champ {
       margin-bottom: 12px;
     }
+    .champ label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 5px;
+      color: #334155;
+    }
+    .champ input[type="date"], .champ select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      box-sizing: border-box;
+      font-size: 14px;
+      background: #ffffff;
+    }
+
+    .groupe-coches {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      padding: 6px 0;
+    }
+    .label-coche {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px !important;
+      font-weight: 600 !important;
+      cursor: pointer;
+      margin-bottom: 0 !important;
+      color: #1e293b;
+    }
+    .label-coche input[type="checkbox"] {
+      width: 17px;
+      height: 17px;
+      cursor: pointer;
+      accent-color: #0284c7;
+    }
+
+    .barre-boutons {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+    }
+    .groupe-actions-droite {
+      display: flex;
+      gap: 10px;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-gris {
+      background: #e2e8f0;
+      color: #334155;
+    }
+    .btn-bleu {
+      background: #0284c7;
+      color: #ffffff;
+    }
+    .btn-rouge {
+      background: #fee2e2;
+      color: #b91c1c;
+    }
+
+    /* BOUTON IMPRIMER */
+    .fc-boutonImprimer-button {
+      background: #0284c7 !important;
+      border-color: #0284c7 !important;
+      color: #ffffff !important;
+      font-weight: 600 !important;
+      display: inline-flex !important;
+      align-items: center !important;
+      gap: 4px !important;
+    }
+    .fc-boutonImprimer-button:hover {
+      background: #0369a1 !important;
+      border-color: #0369a1 !important;
+    }
+
+    /* IMPRESSION A4 */
+    @media print {
+      @page {
+        size: A4 landscape;
+        margin: 5mm;
+      }
+      *, *:before, *:after {
+        box-sizing: border-box !important;
+      }
+      html, body {
+        width: 100% !important;
+        height: 100% !important;
+        max-height: 190mm !important;
+        overflow: hidden !important;
+        background: #ffffff !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+      }
+      body, #calendar-container, #calendar, .fc, .fc-view-harness, .fc-daygrid, table, tbody, tr {
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        page-break-before: avoid !important;
+        page-break-after: avoid !important;
+      }
+      .fc-header-toolbar .fc-toolbar-chunk:first-child,
+      .fc-header-toolbar .fc-toolbar-chunk:last-child,
+      #fenetre-voeu {
+        display: none !important;
+      }
+      .fc-header-toolbar {
+        margin: 0 0 4px 0 !important;
+        padding: 0 !important;
+        justify-content: center !important;
+      }
+      .fc-toolbar-title {
+        font-size: 16px !important;
+        font-weight: 800 !important;
+      }
+      #barre-legende {
+        padding: 2px 0 4px 0 !important;
+        border-bottom: 1px solid #cbd5e1 !important;
+        font-size: 9.5px !important;
+        gap: 8px !important;
+        margin-bottom: 4px !important;
+      }
+      .pastille {
+        width: 10px !important;
+        height: 10px !important;
+      }
+      #calendar-container {
+        padding: 0 !important;
+        height: auto !important;
+        flex: none !important;
+      }
+      #calendar {
+        height: auto !important;
+      }
+      .fc .fc-daygrid-body {
+        height: auto !important;
+      }
+      .fc .fc-daygrid-day-frame {
+        min-height: auto !important;
+        height: 100% !important;
+      }
+      .fc-event {
+        min-height: 24px !important;
+        height: auto !important;
+        margin-top: 1px !important;
+        margin-bottom: 2px !important;
+        box-shadow: none !important;
+        border: 1px solid rgba(0,0,0,0.15) !important;
+      }
+      .fc-event-main {
+        padding: 1px 4px !important;
+      }
+      .event-card {
+        gap: 1px !important;
+        line-height: 1.1 !important;
+      }
+      .event-ligne-statut {
+        font-size: 8px !important;
+        padding: 0 3px !important;
+      }
+      .event-ligne-nom {
+        font-size: 10px !important;
+        font-weight: 700 !important;
+      }
+      .etiquette-ferie, .etiquette-vacances {
+        font-size: 8px !important;
+        padding: 0 2px !important;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="barre-legende">
+    <span style="font-size: 12px; text-transform: uppercase; color: #64748b; margin-right: 4px;">Légende :</span>
+    <span class="item-legende"><span class="pastille" style="background:#fbc02d;"></span> Congés</span>
+    <span class="item-legende"><span class="pastille" style="background:#1976d2;"></span> Télétravail</span>
+    <span class="item-legende"><span class="pastille" style="background:#f57c00;"></span> Déplacement</span>
+    <span class="item-legende"><span class="pastille" style="background:#2e7d32;"></span> Présent</span>
+    <span class="item-legende"><span class="pastille" style="background:#7b1fa2;"></span> Astreinte</span>
+    <span class="item-legende"><span class="pastille" style="background:#dc2626;"></span> Conflit ⚠</span>
+    <span class="item-legende"><span class="pastille pastille-vacances"></span> Vacances Zone B</span>
+    <span class="item-legende"><span class="pastille pastille-we-ferie"></span> Week-end / Férié (Moselle)</span>
+  </div>
+
+  <div id="calendar-container">
+    <div id="calendar"></div>
+  </div>
+
+  <div id="fenetre-voeu">
+    <div class="conteneur-formulaire">
+      <h3 id="titre-modal">Nouveau vœu de présence</h3>
+      
+      <div class="champ">
+        <label for="form-agent">Membre de l'équipe</label>
+        <select id="form-agent">
+          <option value="">Chargement...</option>
+        </select>
+      </div>
+
+      <div class="champ">
+        <label for="form-statut">Statut</label>
+        <select id="form-statut">
+          <option value="CONGES">CONGES</option>
+          <option value="TELETRAVAIL">TELETRAVAIL</option>
+          <option value="EN DEPLACEMENT">EN DEPLACEMENT</option>
+          <option value="PRESENT">PRESENT</option>
+          <option value="ASTREINTE">ASTREINTE</option>
+        </select>
+      </div>
+
+      <div class="champ">
+        <label for="form-debut">Date de début</label>
+        <input type="date" id="form-debut" />
+      </div>
+
+      <div class="champ">
+        <label for="form-fin">Date de fin</label>
+        <input type="date" id="form-fin" />
+      </div>
+
+      <div class="champ" id="conteneur-coches-creneau">
+        <label>Créneau sélectionné</label>
+        <div class="groupe-coches">
+          <label class="label-coche">
+            <input type="checkbox" id="coche-matin" checked /> 🌅 Matin
+          </label>
+          <label class="label-coche">
+            <input type="checkbox" id="coche-aprem" checked /> 🌇 Après-midi
+          </label>
+        </div>
+      </div>
+
+      <div class="barre-boutons">
+        <button type="button" class="btn btn-rouge" id="btn-supprimer" style="display: none;">Supprimer</button>
+        <div class="groupe-actions-droite">
+          <button type="button" class="btn btn-gris" id="btn-annuler">Annuler</button>
+          <button type="button" class="btn btn-bleu" id="btn-valider">Enregistrer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let calendar = null;
+    const annuaireAgents = new Map();
+    let ligneSelectionneeId = null;
+    let nomTableEquipeDetectee = 'Equipe_en_DTPJJ_de_Moselle';
+
+    const PLAGES_VACANCES_ZONE_B = [
+      { debut: "2026-10-17", fin: "2026-11-01", nom: "Toussaint" },
+      { debut: "2026-12-19", fin: "2027-01-03", nom: "Noël" },
+      { debut: "2027-02-20", fin: "2027-03-07", nom: "Hiver" },
+      { debut: "2027-04-17", fin: "2027-05-02", nom: "Printemps" },
+      { debut: "2027-05-06", fin: "2027-05-09", nom: "Pont Ascension" },
+      { debut: "2027-07-03", fin: "2027-09-01", nom: "Été" }
+    ];
+
+    function estJourVacances(dateStr) {
+      for (const p of PLAGES_VACANCES_ZONE_B) {
+        if (dateStr >= p.debut && dateStr <= p.fin) return p.nom;
+      }
+      return null;
+    }
+
+    const DICT_FERIES_MOSELLE = {
+      "2026-01-01": "Jour de l'An",
+      "2026-04-03": "Vendredi Saint (Moselle)",
+      "2026-04-06": "Lundi de Pâques",
+      "2026-05-01": "Fête du Travail",
+      "2026-05-08": "Victoire 1945",
+      "2026-05-14": "Ascension",
+      "2026-05-25": "Lundi de Pentecôte",
+      "2026-07-14": "Fête Nationale",
+      "2026-08-15": "Assomption",
+      "2026-11-01": "Toussaint",
+      "2026-11-11": "Armistice 1918",
+      "2026-12-25": "Noël",
+      "2026-12-26": "Saint-Étienne (Moselle)",
+      "2027-01-01": "Jour de l'An",
+      "2027-03-26": "Vendredi Saint (Moselle)",
+      "2027-03-29": "Lundi de Pâques",
+      "2027-05-01": "Fête du Travail",
+      "2027-05-06": "Ascension",
+      "2027-05-08": "Victoire 1945",
+      "2027-05-17": "Lundi de Pentecôte",
+      "2027-07-14": "Fête Nationale",
+      "2027-08-15": "Assomption",
+      "2027-11-01": "Toussaint",
+      "2027-11-11": "Armistice 1918",
+      "2027-12-25": "Noël",
+      "2027-12-26": "Saint-Étienne (Moselle)"
+    };
+
+    const COULEURS = {
+      'CONFLIT': '#dc2626',
+      'CONGES': '#fbc02d',
+      'CONGÉS': '#fbc02d',
+      'TELETRAVAIL': '#1976d2',
+      'TÉLÉTRAVAIL': '#1976d2',
+      'EN DEPLACEMENT': '#f57c00',
+      'DÉPLACEMENT': '#f57c00',
+      'PRESENT': '#2e7d32',
+      'PRÉSENT': '#2e7d32',
+      'ASTREINTE': '#7b1fa2'
+    };
+
+    function formatIsoDateLocal(d) {
+      const annee = d.getFullYear();
+      const mois = String(d.getMonth() + 1).padStart(2, '0');
+      const jour = String(d.getDate()).padStart(2, '0');
+      return `${annee}-${mois}-${jour}`;
+    }
+
+    function parseDate(val) {
+      if (!val) return null;
+      if (typeof val === 'string') {
+        const iso = val.match(/^(\d{4}-\d{2}-\d{2})/);
+        if (iso) return iso[1];
+        const fr = val.match(/^(\d{2})[-/](\d{2})[-/](\d{4})/);
+        if (fr) return `${fr[3]}-${fr[2]}-${fr[1]}`;
+      }
+      if (typeof val === 'number') {
+        const ts = val < 10000000000 ? val * 1000 : val;
+        const d = new Date(ts);
+        if (!isNaN(d.getTime())) return formatIsoDateLocal(d);
+      }
+      return null;
+    }
+
+    function addDays(strDate, nb) {
+      if (!strDate) return strDate;
+      const d = new Date(strDate);
+      d.setDate(d.getDate() + nb);
+      return formatIsoDateLocal(d);
+    }
+
+    function trouverValeur(row, cles) {
+      if (!row) return null;
+      for (const k of cles) {
+        if (row[k] !== undefined && row[k] !== null) return row[k];
+      }
+      const reelles = Object.keys(row);
+      for (const k of cles) {
+        const pur = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        for (const r of reelles) {
+          if (r.toLowerCase().replace(/[^a-z0-9]/g, '') === pur) {
+            if (row[r] !== undefined && row[r] !== null) return row[r];
+          }
+        }
+      }
+      return null;
+    }
+
+    const modalEl = document.getElementById('fenetre-voeu');
+    const titreModal = document.getElementById('titre-modal');
+    const selectAgent = document.getElementById('form-agent');
+    const selectStatut = document.getElementById('form-statut');
+    const inputDebut = document.getElementById('form-debut');
+    const inputFin = document.getElementById('form-fin');
+    const conteneurCoches = document.getElementById('conteneur-coches-creneau');
+    const cocheMatin = document.getElementById('coche-matin');
+    const cocheAprem = document.getElementById('coche-aprem');
+    const btnSupprimer = document.getElementById('btn-supprimer');
+
+    selectStatut.addEventListener('change', function() {
+      if (this.value === 'ASTREINTE') {
+        conteneurCoches.style.display = 'none';
+        cocheMatin.checked = true;
+        cocheAprem.checked = true;
+      } else {
+        conteneurCoches.style.display = 'block';
+      }
+    });
+
+    function determinerTexteCreneau() {
+      if (selectStatut.value === 'ASTREINTE') return 'Journée';
+      if (cocheMatin.checked && cocheAprem.checked) return 'Journée';
+      if (cocheMatin.checked) return 'Matin';
+      if (cocheAprem.checked) return 'Après-midi';
+      return 'Journée';
+    }
+
+    function appliquerCochesDepuisTexte(val) {
+      const v = String(val || '').toLowerCase();
+      if (v.includes('matin') && !v.includes('apr')) {
+        cocheMatin.checked = true;
+        cocheAprem.checked = false;
+      } else if (v.includes('apr')) {
+        cocheMatin.checked = false;
+        cocheAprem.checked = true;
+      } else {
+        cocheMatin.checked = true;
+        cocheAprem.checked = true;
+      }
+    }
+
+    function fermer() {
+      modalEl.style.display = 'none';
+      ligneSelectionneeId = null;
+      btnSupprimer.style.display = 'none';
+      if (calendar) calendar.unselect();
+    }
+
+    document.getElementById('btn-annuler').addEventListener('click', fermer);
+
+    btnSupprimer.addEventListener('click', async function() {
+      if (!ligneSelectionneeId) return;
+      if (confirm("Supprimer ce vœu de présence ?")) {
+        try {
+          await grist.docApi.applyUserActions([['RemoveRecord', 'Presences', ligneSelectionneeId]]);
+          fermer();
+          await toutRecharger();
+        } catch(e) {
+          alert("Erreur lors de la suppression.");
+        }
+      }
+    });
+
+    function majSelectAgents() {
+      const choix = selectAgent.value;
+      selectAgent.innerHTML = '<option value="">-- Choisir un membre --</option>';
+
+      const vu = new Set();
+      const liste = Array.from(annuaireAgents.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+
+      for (const [id, label] of liste) {
+        if (!vu.has(label) && !label.startsWith('Agent #')) {
+          vu.add(label);
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
+      for (const [id, label] of liste) {
+        if (!vu.has(label)) {
+          vu.add(label);
+          const opt = document.createElement('option');
+          opt.value = String(id);
+          opt.textContent = label;
+          selectAgent.appendChild(opt);
+        }
+      }
+
+      if (choix && annuaireAgents.has(parseInt(choix, 10))) {
+        selectAgent.value = choix;
+      }
+    }
+
+    async function chargerAnnuaire() {
+      const candidatsTables = [
+        nomTableEquipeDetectee,
+        'Equipe_en_DTPJJ_de_Moselle',
+        'EQUIPE_EN_DTPJJ_DE_MOSELLE',
+        'INSCRITS_DTPJJ_MOSELLE',
+        'Inscrits_DTPJJ_Moselle',
+        'INSCRIRE_DANS_EQUIPE',
+        'INSCRIPTION_EQUIPE_DTPJJ'
+      ];
+
+      for (const nomT of candidatsTables) {
+        try {
+          const t = await grist.docApi.fetchTable(nomT);
+          if (t && t.id && t.id.length > 0) {
+            nomTableEquipeDetectee = nomT;
+
+            const colNom = t.Nom || t.nom || [];
+            const colPrenom = t.Prenom || t.prenom || [];
+            const colFonc = t.Fonction || t.fonction || [];
+            const colIdentite = t.Identite || t.identite || t['Identité'] || [];
+
+            for (let i = 0; i < t.id.length; i++) {
+              const rowId = t.id[i];
+              let lib = '';
+
+              if (colIdentite && colIdentite[i]) {
+                lib = String(colIdentite[i]).trim();
+              }
+              if (!lib) {
+                const nom = colNom[i] || '';
+                const prenom = colPrenom[i] || '';
+                const fonc = colFonc[i] || '';
+                lib = `${nom} ${prenom}${fonc ? ' - ' + fonc : ''}`.trim();
+              }
+
+              if (lib && !lib.includes('NaN')) {
+                annuaireAgents.set(rowId, lib);
+              }
+            }
+            majSelectAgents();
+            return;
+          }
+        } catch(e) {}
+      }
+    }
+
+    async function toutRecharger() {
+      await chargerAnnuaire();
+
+      try {
+        const p = await grist.docApi.fetchTable('Presences');
+        if (p && p.id && p.id.length > 0) {
+          const rows = [];
+          for (let i = 0; i < p.id.length; i++) {
+            rows.push({
+              id: p.id[i],
+              qui: p.qui ? p.qui[i] : null,
+              Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
+              Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
+              STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
+              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK'),
+              Agent: p.Agent ? p.Agent[i] : (p.Identite ? p.Identite[i] : null),
+              Creneau: p.Creneau ? p.Creneau[i] : (p.creneau ? p.creneau[i] : (p.Plage ? p.Plage[i] : 'Journée'))
+            });
+          }
+          afficherRecords(rows);
+          return;
+        }
+      } catch(e) {}
+
+      try {
+        const sel = await grist.docApi.fetchSelectedTable();
+        if (Array.isArray(sel) && sel.length > 0) {
+          afficherRecords(sel);
+        }
+      } catch(e2) {}
+    }
+
+    function afficherRecords(records) {
+      if (!records || !calendar) return;
+
+      records.forEach(r => {
+        const qId = (typeof r.qui === 'number') ? r.qui : (r.qui && r.qui.id ? r.qui.id : parseInt(r.qui, 10));
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
+
+        if (!isNaN(qId) && typeof txt === 'string' && txt.trim() && !txt.startsWith('Agent #') && !txt.includes('NaN')) {
+          annuaireAgents.set(qId, txt.trim());
+        }
+      });
+      majSelectAgents();
+
+      const cumulAutoriseAstreinte = ['TELETRAVAIL', 'TÉLÉTRAVAIL', 'EN DEPLACEMENT', 'DÉPLACEMENT', 'PRESENT', 'PRÉSENT'];
+
+      const valides = records.map(r => {
+        const debut = parseDate(trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']));
+        const fin = parseDate(trouverValeur(r, ['Date fin', 'Date_fin', 'date_fin'])) || debut;
+        const q = trouverValeur(r, ['qui', 'Agent']);
+        const txt = trouverValeur(r, ['Agent', 'Identite']);
+        const creneau = String(trouverValeur(r, ['Creneau', 'creneau', 'Plage']) || 'Journée').trim();
+
+        const qId = (typeof q === 'number') ? q : (q && q.id ? q.id : parseInt(q, 10));
+        let nomAffiche = '';
+
+        if (!isNaN(qId) && annuaireAgents.has(qId)) {
+          nomAffiche = annuaireAgents.get(qId);
+        } else if (typeof txt === 'string' && txt.trim() && !txt.startsWith('Agent #') && !txt.includes('NaN')) {
+          nomAffiche = txt.trim();
+        } else if (!isNaN(qId)) {
+          nomAffiche = annuaireAgents.get(qId) || `Agent #${qId}`;
+        } else {
+          nomAffiche = 'Collaborateur';
+        }
+
+        const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
+        const conf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
+
+        return {
+          id: r.id,
+          agentId: isNaN(qId) ? null : qId,
+          nomAffiche: nomAffiche,
+          debut: debut,
+          fin: fin,
+          statut: statut,
+          creneau: creneau,
+          statutConflit: conf
+        };
+      }).filter(r => Boolean(r.debut));
+
+      const eventsPresences = valides.map((r, index, array) => {
+        const sNorm = r.statut.toUpperCase();
+        const confNorm = r.statutConflit.toUpperCase();
+
+        const doublonInterdit = array.some((autre, autreIdx) => {
+          if (index === autreIdx) return false;
+          if (!r.agentId || r.agentId !== autre.agentId) return false;
+
+          const chevauche = (r.debut <= autre.fin && r.fin >= autre.debut);
+          if (!chevauche) return false;
+
+          const autreSNorm = autre.statut.toUpperCase();
+          const unAstreinte = sNorm.includes('ASTREINTE');
+          const autreAstreinte = autreSNorm.includes('ASTREINTE');
+
+          if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
+          if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
+
+          const rEstMatin = r.creneau.toLowerCase().includes('matin');
+          const rEstAprem = r.creneau.toLowerCase().includes('apr');
+          const autreEstMatin = autre.creneau.toLowerCase().includes('matin');
+          const autreEstAprem = autre.creneau.toLowerCase().includes('apr');
+
+          if ((rEstMatin && autreEstAprem) || (rEstAprem && autreEstMatin)) return false;
+
+          return true;
+        });
+
+        const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
+
+        let couleur = '#1976d2';
+        let estJaune = false;
+
+        if (estEnConflit) {
+          couleur = COULEURS['CONFLIT'];
+        } else {
+          for (const [cle, val] of Object.entries(COULEURS)) {
+            if (sNorm.includes(cle)) {
+              couleur = val;
+              if (cle.includes('CONG')) estJaune = true;
+              break;
+            }
+          }
+        }
+
+        let pictoTexte = '';
+        let classeDemi = '';
+        let libelleCreneau = '';
+
+        if (!sNorm.includes('ASTREINTE')) {
+          if (r.creneau.toLowerCase().includes('matin')) {
+            pictoTexte = '🌅';
+            libelleCreneau = ' (MATIN)';
+            classeDemi = 'event-demi-matin';
+          } else if (r.creneau.toLowerCase().includes('apr')) {
+            pictoTexte = '🌇';
+            libelleCreneau = ' (APRÈS-MIDI)';
+            classeDemi = 'event-demi-aprem';
+          }
+        }
+
+        const badgeTexte = estEnConflit ? 'CONFLIT ⚠' : ((r.statut || 'PRESENCE') + libelleCreneau);
+
+        return {
+          id: String(r.id),
+          title: `${pictoTexte} [${badgeTexte}] ${r.nomAffiche}`.trim(),
+          start: r.debut,
+          end: addDays(r.fin, 1),
+          backgroundColor: couleur,
+          borderColor: couleur,
+          allDay: true,
+          classNames: [classeDemi],
+          extendedProps: {
+            rowId: r.id,
+            agentId: r.agentId,
+            nomAgent: r.nomAffiche,
+            statutInitial: r.statut,
+            creneauInitial: r.creneau,
+            statutBadge: badgeTexte,
+            pictoTexte: pictoTexte,
+            debutReel: r.debut,
+            finReelle: r.fin,
+            estJaune: estJaune,
+            periodeTexte: `${r.debut} au ${r.fin}`
+          }
+        };
+      });
+
+      calendar.removeAllEvents();
+      calendar.addEventSource(eventsPresences);
+    }
+
+    document.getElementById('btn-valider').addEventListener('click', async function() {
+      const agentVal = selectAgent.value;
+      const statut = selectStatut.value;
+      const debut = inputDebut.value;
+      const fin = inputFin.value;
+      const creneau = determinerTexteCreneau();
+
+      if (!agentVal || !debut || !fin) {
+        alert("Veuillez sélectionner un membre et des dates valides.");
+        return;
+      }
+
+      if (!cocheMatin.checked && !cocheAprem.checked && statut !== 'ASTREINTE') {
+        alert("Veuillez cocher au moins une plage (Matin et/ou Après-midi).");
+        return;
+      }
+
+      const agentNum = parseInt(agentVal, 10);
+      const refAgent = isNaN(agentNum) ? agentVal : agentNum;
+
+      const optionChoisie = selectAgent.options[selectAgent.selectedIndex];
+      if (optionChoisie && optionChoisie.textContent) {
+        annuaireAgents.set(refAgent, optionChoisie.textContent.trim());
+      }
+
+      const tsDebut = Math.floor(new Date(debut + 'T12:00:00Z').getTime() / 1000);
+      const tsFin = Math.floor(new Date(fin + 'T12:00:00Z').getTime() / 1000);
+
+      const champsRecord = {
+        qui: refAgent,
+        STATUT: statut,
+        Date_debut: tsDebut,
+        Date_fin: tsFin,
+        Creneau: creneau
+      };
+
+      try {
+        if (ligneSelectionneeId) {
+          await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, champsRecord]]);
+        } else {
+          await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, champsRecord]]);
+        }
+        fermer();
+        await toutRecharger();
+      } catch(e) {
+        delete champsRecord.Creneau;
+        try {
+          if (ligneSelectionneeId) {
+            await grist.docApi.applyUserActions([['UpdateRecord', 'Presences', ligneSelectionneeId, champsRecord]]);
+          } else {
+            await grist.docApi.applyUserActions([['AddRecord', 'Presences', null, champsRecord]]);
+          }
+          fermer();
+          await toutRecharger();
+        } catch(e2) {
+          alert("Erreur lors de l'enregistrement dans Grist.");
+        }
+      }
+    });
+
+    function initialiser() {
+      const calendarEl = document.getElementById('calendar');
+      calendar = new FullCalendar.Calendar(calendarEl, {
+        initialView: 'dayGridMonth',
+        locale: 'fr',
+        firstDay: 1,
+        selectable: true,
+        headerToolbar: {
+          left: 'prev,next today',
+          center: 'title',
+          right: 'boutonImprimer dayGridMonth,dayGridWeek'
+        },
+        customButtons: {
+          boutonImprimer: {
+            text: '🖨️ Imprimer',
+            click: function() {
+              window.print();
+            }
+          }
+        },
+        buttonText: {
+          today: "Aujourd'hui",
+          month: 'Mois',
+          week: 'Semaine'
+        },
+
+        dayCellClassNames: function(arg) {
+          const classes = [];
+          const dStr = formatIsoDateLocal(arg.date);
+          if (DICT_FERIES_MOSELLE[dStr]) classes.push('cellule-ferie-moselle');
+          if (estJourVacances(dStr)) classes.push('cellule-vacances-zone-b');
+          return classes;
+        },
+
+        dayCellContent: function(arg) {
+          const dStr = formatIsoDateLocal(arg.date);
+          const div = document.createElement('div');
+          div.style.display = 'flex';
+          div.style.alignItems = 'center';
+          div.style.justifyContent = 'space-between';
+          div.style.padding = '2px 4px';
+
+          const spanNum = document.createElement('span');
+          spanNum.textContent = arg.dayNumberText;
+          div.appendChild(spanNum);
+
+          const nomFerie = DICT_FERIES_MOSELLE[dStr];
+          if (nomFerie) {
+            const badgeF = document.createElement('span');
+            badgeF.className = 'etiquette-ferie';
+            badgeF.textContent = nomFerie;
+            badgeF.title = `Jour férié : ${nomFerie}`;
+            div.appendChild(badgeF);
+          } else {
+            const nomVac = estJourVacances(dStr);
+            if (nomVac && arg.date.getDay() === 1) {
+              const badgeV = document.createElement('span');
+              badgeV.className = 'etiquette-vacances';
+              badgeV.textContent = 'Vacances B';
+              div.appendChild(badgeV);
+            }
+          }
+
+          return { domNodes: [div] };
+        },
+
+        eventContent: function(arg) {
+          const badge = arg.event.extendedProps.statutBadge || '';
+          const picto = arg.event.extendedProps.pictoTexte || '';
+          const nom = arg.event.extendedProps.nomAgent || arg.event.title;
+          const estJaune = arg.event.extendedProps.estJaune;
+
+          const conteneur = document.createElement('div');
+          conteneur.className = `event-card ${estJaune ? 'theme-sombre' : 'theme-clair'}`;
+          conteneur.title = `${nom}\n${badge}\n${arg.event.extendedProps.periodeTexte || ''}`;
+
+          const divTop = document.createElement('div');
+          divTop.className = 'event-ligne-top';
+
+          const spanStatut = document.createElement('span');
+          spanStatut.className = 'event-ligne-statut';
+          spanStatut.textContent = badge;
+          divTop.appendChild(spanStatut);
+
+          if (picto) {
+            const spanPicto = document.createElement('span');
+            spanPicto.className = 'event-picto';
+            spanPicto.textContent = picto;
+            divTop.appendChild(spanPicto);
+          }
+
+          const divNom = document.createElement('div');
+          divNom.className = 'event-ligne-nom';
+          divNom.textContent = nom;
+
+          conteneur.appendChild(divTop);
+          conteneur.appendChild(divNom);
+
+          return { domNodes: [conteneur] };
+        },
+
+        select: function(info) {
+          ligneSelectionneeId = null;
+          titreModal.textContent = "Nouveau vœu de présence";
+          btnSupprimer.style.display = "none";
+          inputDebut.value = info.startStr;
+          const f = new Date(info.endStr);
+          f.setDate(f.getDate() - 1);
+          inputFin.value = formatIsoDateLocal(f);
+          cocheMatin.checked = true;
+          cocheAprem.checked = true;
+          conteneurCoches.style.display = (selectStatut.value === 'ASTREINTE') ? 'none' : 'block';
+          majSelectAgents();
+          modalEl.style.display = 'flex';
+        },
+
+        eventClick: function(info) {
+          const props = info.event.extendedProps;
+          ligneSelectionneeId = props.rowId;
+          titreModal.textContent = "Modifier la présence";
+          btnSupprimer.style.display = "inline-block";
+          inputDebut.value = props.debutReel;
+          inputFin.value = props.finReelle;
+          majSelectAgents();
+          if (props.agentId) {
+            selectAgent.value = String(props.agentId);
+          }
+          const sInit = props.statutInitial.toUpperCase();
+          for (let opt of selectStatut.options) {
+            if (sInit.includes(opt.value)) {
+              selectStatut.value = opt.value;
+              break;
+            }
+          }
+          if (sInit.includes('ASTREINTE')) {
+            conteneurCoches.style.display = 'none';
+          } else {
+            conteneurCoches.style.display = 'block';
+            appliquerCochesDepuisTexte(props.creneauInitial);
+          }
+          modalEl.style.display = 'flex';
+        },
+        events: []
+      });
+
+      calendar.render();
+
+      grist.ready({ requiredAccess: 'full' });
+
+      toutRecharger();
+
+      grist.onRecords(function(records) {
+        if (records && records.length > 0) {
+          const aDesDates = records.some(r => trouverValeur(r, ['Date début', 'Date_debut', 'date_debut']) !== null);
+          if (aDesDates) {
+            afficherRecords(records);
+            return;
+          }
+        }
+        toutRecharger();
+      });
+
+      window.addEventListener('focus', toutRecharger);
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', initialiser);
+    } else {
+      initialiser();
+    }
+  </script>
+</body>
+</html>

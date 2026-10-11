@@ -62,14 +62,12 @@
       height: 100%;
     }
 
-    /* WEEK-ENDS ET JOURS FÉRIÉS (MOSELLE) */
     .fc-day-sat, 
     .fc-day-sun, 
     .cellule-ferie-moselle {
       background-color: #f1f5f9 !important;
     }
 
-    /* VACANCES SCOLAIRES ZONE B */
     .cellule-vacances-zone-b {
       background-color: #f0f9ff !important;
     }
@@ -103,7 +101,6 @@
       display: inline-block;
     }
 
-    /* BANDEAUX HAUTE LISIBILITÉ */
     .fc-event, 
     .fc-daygrid-event, 
     .fc-daygrid-block-event {
@@ -184,7 +181,6 @@
       text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
     }
 
-    /* MODAL */
     #fenetre-voeu {
       display: none;
       position: fixed;
@@ -592,9 +588,8 @@
 
     function determinerTexteCreneau() {
       if (selectStatut.value === 'ASTREINTE') return 'Journée';
-      if (cocheMatin.checked && cocheAprem.checked) return 'Journée';
-      if (cocheMatin.checked) return 'Matin';
-      if (cocheAprem.checked) return 'Après-midi';
+      if (cocheMatin.checked && !cocheAprem.checked) return 'Matin';
+      if (!cocheMatin.checked && cocheAprem.checked) return 'Après-midi';
       return 'Journée';
     }
 
@@ -726,7 +721,6 @@
               Date_debut: p.Date_debut ? p.Date_debut[i] : (p['Date début'] ? p['Date début'][i] : null),
               Date_fin: p.Date_fin ? p.Date_fin[i] : (p['Date fin'] ? p['Date fin'][i] : null),
               STATUT: p.STATUT ? p.STATUT[i] : (p.Statut ? p.Statut[i] : ''),
-              Statut_conflit: p.Statut_conflit ? p.Statut_conflit[i] : (p.Statut2 ? p.Statut2[i] : 'OK'),
               Agent: p.Agent ? p.Agent[i] : (p.Identite ? p.Identite[i] : null),
               Creneau: p.Creneau ? p.Creneau[i] : (p.creneau ? p.creneau[i] : (p.Plage ? p.Plage[i] : 'Journée'))
             });
@@ -780,7 +774,6 @@
         }
 
         const statut = String(trouverValeur(r, ['STATUT', 'Statut']) || '').trim();
-        const conf = String(trouverValeur(r, ['Statut conflit', 'Statut_conflit', 'Statut2']) || 'OK').trim();
 
         return {
           id: r.id,
@@ -789,16 +782,15 @@
           debut: debut,
           fin: fin,
           statut: statut,
-          creneau: creneau,
-          statutConflit: conf
+          creneau: creneau
         };
       }).filter(r => Boolean(r.debut));
 
       const eventsPresences = valides.map((r, index, array) => {
         const sNorm = r.statut.toUpperCase();
-        const confNorm = r.statutConflit.toUpperCase();
 
-        const doublonInterdit = array.some((autre, autreIdx) => {
+        // LOGIQUE DE CONFLIT SUR-MESURE
+        const estEnConflit = array.some((autre, autreIdx) => {
           if (index === autreIdx) return false;
           if (!r.agentId || r.agentId !== autre.agentId) return false;
 
@@ -809,22 +801,24 @@
           const unAstreinte = sNorm.includes('ASTREINTE');
           const autreAstreinte = autreSNorm.includes('ASTREINTE');
 
+          // Astreinte autorisée en parallèle
           if (unAstreinte && cumulAutoriseAstreinte.some(c => autreSNorm.includes(c))) return false;
           if (autreAstreinte && cumulAutoriseAstreinte.some(c => sNorm.includes(c))) return false;
 
+          // Résolution fine Matin / Après-midi
           const rEstMatin = r.creneau.toLowerCase().includes('matin') && !r.creneau.toLowerCase().includes('apr');
-          const rEstAprem = r.creneau.toLowerCase().includes('apr');
+          const rEstAprem = r.creneau.toLowerCase().includes('apr') && !r.creneau.toLowerCase().includes('matin');
           const autreEstMatin = autre.creneau.toLowerCase().includes('matin') && !autre.creneau.toLowerCase().includes('apr');
-          const autreEstAprem = autre.creneau.toLowerCase().includes('apr');
+          const autreEstAprem = autre.creneau.toLowerCase().includes('apr') && !autre.creneau.toLowerCase().includes('matin');
 
+          // Complémentaires -> AUCUN CONFLIT
           if ((rEstMatin && autreEstAprem) || (rEstAprem && autreEstMatin)) {
             return false;
           }
 
+          // Même créneau ou journée entière partagée -> CONFLIT
           return true;
         });
-
-        const estEnConflit = confNorm.includes('CONFLIT') || doublonInterdit;
 
         let couleur = '#1976d2';
         let estJaune = false;
@@ -846,11 +840,12 @@
         let libelleCreneau = '';
 
         if (!sNorm.includes('ASTREINTE')) {
-          if (r.creneau.toLowerCase().includes('matin') && !r.creneau.toLowerCase().includes('apr')) {
+          const cMin = r.creneau.toLowerCase();
+          if (cMin.includes('matin') && !cMin.includes('apr')) {
             pictoTexte = '🌅';
             libelleCreneau = ' (MATIN)';
             classeDemi = 'event-demi-matin';
-          } else if (r.creneau.toLowerCase().includes('apr')) {
+          } else if (cMin.includes('apr') && !cMin.includes('matin')) {
             pictoTexte = '🌇';
             libelleCreneau = ' (APRÈS-MIDI)';
             classeDemi = 'event-demi-aprem';
@@ -1095,7 +1090,6 @@
 
       calendar.render();
 
-      // Enregistrement auprès de Grist
       try {
         grist.ready({ requiredAccess: 'full' });
       } catch(e) {
